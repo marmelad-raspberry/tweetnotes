@@ -78,7 +78,7 @@
                 if (el.tagName === 'IMG' || el.tagName === 'VIDEO') el.src = url;
                 else el.style.backgroundImage = `url("${url}")`;
             } else {
-                lazyMediaObserver.observe(el);
+                delete el.dataset.blobUrl; if (el.tagName === 'IMG' || el.tagName === 'VIDEO') el.removeAttribute('src'); else el.style.backgroundImage = 'none'; lazyMediaObserver.observe(el);
             }
         }
     }
