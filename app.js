@@ -319,7 +319,7 @@
         } catch(e) {}
     }
 
-    async function loadStateFromFolder() { try { await writeFile(folderHandle, ".NOMEDIA", ""); await writeFile(folderHandle, ".nomedia", ""); } catch(e) {}
+    async function loadStateFromFolder() { try { await folderHandle.getFileHandle(".nomedia"); } catch(e) { try { await writeFile(folderHandle, ".nomedia", ""); } catch(err) {} }
         profiles = [];
         threadsData = [];
         
@@ -921,8 +921,8 @@
         const pi = document.getElementById('editProfilePic'); const ci = document.getElementById('editCoverPic');
         const p = profiles.find(x => x.id === activeProfileId);
         if (nn) p.name = nn; if (nh) p.handle = formatUniqueHandle(nh, p.id); p.bio = nb;
-        if (pi.files[0]) { p.avatarFile = pi.files[0]; p.avatar = URL.createObjectURL(pi.files[0]); p.avatarThumb = URL.createObjectURL(await generateThumbnail(pi.files[0])); }
-        if (ci.files[0]) { p.coverFile = ci.files[0]; p.cover = URL.createObjectURL(ci.files[0]); p.coverThumb = URL.createObjectURL(await generateThumbnail(ci.files[0])); }
+        if (pi.files[0]) { if(p.avatarPath) await deleteMediaFile(p.avatarPath); if(p.avatarThumbPath) await deleteMediaFile(p.avatarThumbPath); p.avatarFile = pi.files[0]; p.avatar = URL.createObjectURL(pi.files[0]); p.avatarThumb = URL.createObjectURL(await generateThumbnail(pi.files[0])); }
+        if (ci.files[0]) { if(p.coverPath) await deleteMediaFile(p.coverPath); if(p.coverThumbPath) await deleteMediaFile(p.coverThumbPath); p.coverFile = ci.files[0]; p.cover = URL.createObjectURL(ci.files[0]); p.coverThumb = URL.createObjectURL(await generateThumbnail(ci.files[0])); }
         await saveProfileToFolder(p); renderCurrentProfileUI(); if (currentTab === 'profile') renderProfileContent(); else renderAllFeed();
         pi.value = ''; ci.value = ''; closeEditModal();
     }
