@@ -1,5 +1,5 @@
     const FOLDER_DB_NAME = 'yu_folder_storage';
-    const FOLDER_DB_VERSION = 1;
+    const FOLDER_DB_VERSION = 2;
     const FOLDER_DB_STORE = 'settings';
     const FOLDER_DB_KEY = 'selectedFolder';
 
@@ -243,123 +243,167 @@
     }
 
     async function saveSettingsToFolder() {
-        if (!folderHandle) return;
-        await writeJsonFile(folderHandle, 'settings.json', { activeProfileId });
+    try {
+        const db = await openFolderDatabase();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction(FOLDER_DB_STORE, 'readwrite');
+            tx.objectStore(FOLDER_DB_STORE).put({ activeProfileId }, 'app_settings');
+            tx.oncomplete = resolve;
+            tx.onerror = reject;
+        });
+    } catch (e) {}
+}
+
+async function saveProfileToFolder(profile) {
+    if (!folderHandle) return;
+    const mediaDir = await folderHandle.getDirectoryHandle('media', {create: true});
+    const p = {...profile};
+    
+    if (p.avatarFile) {
+        const ext = p.avatarFile.name.split('.').pop() || 'png';
+        const filename = `${p.id}_avatar.${ext}`;
+        await writeFile(mediaDir, filename, p.avatarFile);
+        p.avatarPath = filename; const thumbBlobAv = await generateThumbnail(p.avatarFile, 256); const thumbFileAv = `${p.id}_avatar_thumb.webp`; await writeFile(mediaDir, thumbFileAv, thumbBlobAv); p.avatarThumbPath = thumbFileAv; const thumbBlobAvFeed = await generateThumbnail(p.avatarFile, 128); const thumbFileAvFeed = `${p.id}_avatar_feed_thumb.webp`; await writeFile(mediaDir, thumbFileAvFeed, thumbBlobAvFeed); p.avatarFeedThumbPath = thumbFileAvFeed;
+        delete p.avatarFile;
     }
-
-    async function saveProfileToFolder(profile) {
-        if (!folderHandle) return;
-        const profilesDir = await folderHandle.getDirectoryHandle('profiles', {create: true});
-        const mediaDir = await folderHandle.getDirectoryHandle('media', {create: true});
-        const p = {...profile};
-        
-        if (p.avatarFile) {
-            const ext = p.avatarFile.name.split('.').pop() || 'png';
-            const filename = `${p.id}_avatar.${ext}`;
-            await writeFile(mediaDir, filename, p.avatarFile);
-            p.avatarPath = filename; const thumbBlobAv = await generateThumbnail(p.avatarFile, 256); const thumbFileAv = `${p.id}_avatar_thumb.webp`; await writeFile(mediaDir, thumbFileAv, thumbBlobAv); p.avatarThumbPath = thumbFileAv; const thumbBlobAvFeed = await generateThumbnail(p.avatarFile, 128); const thumbFileAvFeed = `${p.id}_avatar_feed_thumb.webp`; await writeFile(mediaDir, thumbFileAvFeed, thumbBlobAvFeed); p.avatarFeedThumbPath = thumbFileAvFeed;
-            delete p.avatarFile;
-        }
-        if (p.coverFile) {
-            const ext = p.coverFile.name.split('.').pop() || 'png';
-            const filename = `${p.id}_cover.${ext}`;
-            await writeFile(mediaDir, filename, p.coverFile);
-            p.coverPath = filename; const thumbBlobCov = await generateThumbnail(p.coverFile, 600); const thumbFileCov = `${p.id}_cover_thumb.webp`; await writeFile(mediaDir, thumbFileCov, thumbBlobCov); p.coverThumbPath = thumbFileCov;
-            delete p.coverFile;
-        }
-        delete p.avatar; delete p.cover; delete p.avatarThumb; delete p.coverThumb; delete p.avatarFeedThumb;
-        await writeJsonFile(profilesDir, `${p.id}.json`, p);
+    if (p.coverFile) {
+        const ext = p.coverFile.name.split('.').pop() || 'png';
+        const filename = `${p.id}_cover.${ext}`;
+        await writeFile(mediaDir, filename, p.coverFile);
+        p.coverPath = filename; const thumbBlobCov = await generateThumbnail(p.coverFile, 600); const thumbFileCov = `${p.id}_cover_thumb.webp`; await writeFile(mediaDir, thumbFileCov, thumbBlobCov); p.coverThumbPath = thumbFileCov;
+        delete p.coverFile;
     }
+    delete p.avatar; delete p.cover; delete p.avatarThumb; delete p.coverThumb; delete p.avatarFeedThumb;
+    
+    try {
+        const db = await openFolderDatabase();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('profiles', 'readwrite');
+            tx.objectStore('profiles').put(p);
+            tx.oncomplete = resolve;
+            tx.onerror = reject;
+        });
+    } catch(e) {}
+}
 
-    async function saveThreadToFolder(thread) {
-        if (!folderHandle) return;
-        const threadsDir = await folderHandle.getDirectoryHandle('threads', {create: true});
-        const mediaDir = await folderHandle.getDirectoryHandle('media', {create: true});
-        const t = JSON.parse(JSON.stringify(thread));
-        
-        for (let i = 0; i < thread.posts.length; i++) {
-            let origPost = thread.posts[i];
-            let savePost = t.posts[i];
-            for (let j = 0; j < (origPost.media || []).length; j++) {
-                let m = origPost.media[j];
-                if (m.file) {
-                    const ext = m.file.name.split('.').pop() || (m.isVideo ? 'mp4' : 'jpg');
-                    const filename = `${origPost.id}_${j}.${ext}`;
-                    await writeFile(mediaDir, filename, m.file);
-                    m.path = filename;
-                    savePost.media[j].path = filename;
+async function saveThreadToFolder(thread) {
+    if (!folderHandle) return;
+    const mediaDir = await folderHandle.getDirectoryHandle('media', {create: true});
+    const t = JSON.parse(JSON.stringify(thread));
+    
+    for (let i = 0; i < thread.posts.length; i++) {
+        let origPost = thread.posts[i];
+        let savePost = t.posts[i];
+        for (let j = 0; j < (origPost.media || []).length; j++) {
+            let m = origPost.media[j];
+            if (m.file) {
+                const ext = m.file.name.split('.').pop() || (m.isVideo ? 'mp4' : 'jpg');
+                const filename = `${origPost.id}_${j}.${ext}`;
+                await writeFile(mediaDir, filename, m.file);
+                m.path = filename;
+                savePost.media[j].path = filename;
 
-                    if (m.thumbBlob) {
-                        const thumbFilename = `${origPost.id}_${j}_thumb.webp`;
-                        await writeFile(mediaDir, thumbFilename, m.thumbBlob);
-                        m.thumbPath = thumbFilename;
-                        savePost.media[j].thumbPath = thumbFilename;
-                    }
-
-                    delete m.file;
-                    delete m.thumbBlob;
+                if (m.thumbBlob) {
+                    const thumbFilename = `${origPost.id}_${j}_thumb.webp`;
+                    await writeFile(mediaDir, thumbFilename, m.thumbBlob);
+                    m.thumbPath = thumbFilename;
+                    savePost.media[j].thumbPath = thumbFilename;
                 }
-                delete savePost.media[j].url;
-                delete savePost.media[j].thumbnailUrl;
-                delete savePost.media[j].file;
-                delete savePost.media[j].thumbBlob;
+
+                delete m.file;
+                delete m.thumbBlob;
             }
+            delete savePost.media[j].url;
+            delete savePost.media[j].thumbnailUrl;
+            delete savePost.media[j].file;
+            delete savePost.media[j].thumbBlob;
         }
-        await writeJsonFile(threadsDir, `${t.id}.json`, t);
     }
+    
+    try {
+        const db = await openFolderDatabase();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('threads', 'readwrite');
+            tx.objectStore('threads').put(t);
+            tx.oncomplete = resolve;
+            tx.onerror = reject;
+        });
+    } catch (e) {}
+}
 
-    async function deleteThreadFromFolder(threadId) {
-        if (!folderHandle) return;
-        try {
-            const threadsDir = await folderHandle.getDirectoryHandle('threads', {create: true});
-            await threadsDir.removeEntry(`${threadId}.json`);
-        } catch(e) {}
-    }
+async function deleteThreadFromFolder(threadId) {
+    try {
+        const db = await openFolderDatabase();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('threads', 'readwrite');
+            tx.objectStore('threads').delete(threadId);
+            tx.oncomplete = resolve;
+            tx.onerror = reject;
+        });
+    } catch(e) {}
+}
 
-    async function deleteProfileFromFolder(profileId) {
-        if (!folderHandle) return;
-        try {
-            const profilesDir = await folderHandle.getDirectoryHandle('profiles', {create: true});
-            await profilesDir.removeEntry(`${profileId}.json`);
-        } catch(e) {}
-    }
+async function deleteProfileFromFolder(profileId) {
+    try {
+        const db = await openFolderDatabase();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('profiles', 'readwrite');
+            tx.objectStore('profiles').delete(profileId);
+            tx.oncomplete = resolve;
+            tx.onerror = reject;
+        });
+    } catch(e) {}
+}
 
-    async function loadStateFromFolder() { try { await folderHandle.getFileHandle(".nomedia"); } catch(e) { try { await writeFile(folderHandle, ".nomedia", ""); } catch(err) {} }
-        profiles = [];
-        threadsData = [];
+async function loadStateFromFolder() { 
+    try { await folderHandle.getFileHandle(".nomedia"); } catch(e) { try { await writeFile(folderHandle, ".nomedia", ""); } catch(err) {} }
+    profiles = [];
+    threadsData = [];
+    
+    try {
+        const db = await openFolderDatabase();
         
-        const profilesDir = await folderHandle.getDirectoryHandle('profiles', {create: true});
-        const threadsDir = await folderHandle.getDirectoryHandle('threads', {create: true});
-
+        // Cargar ajustes
         try {
-            const settingsFile = await folderHandle.getFileHandle('settings.json');
-            const settingsText = await (await settingsFile.getFile()).text();
-            activeProfileId = JSON.parse(settingsText).activeProfileId;
+            const settings = await new Promise((res, rej) => {
+                const tx = db.transaction(FOLDER_DB_STORE, 'readonly');
+                const req = tx.objectStore(FOLDER_DB_STORE).get('app_settings');
+                req.onsuccess = () => res(req.result);
+                req.onerror = () => rej();
+            });
+            if(settings && settings.activeProfileId) activeProfileId = settings.activeProfileId;
         } catch(e) { activeProfileId = null; }
 
-        for await (const entry of profilesDir.values()) {
-            if (entry.kind === 'file' && entry.name.endsWith('.json')) {
-                try {
-                    const p = JSON.parse(await (await entry.getFile()).text());
-                    profiles.push(p);
-                } catch(e) {}
-            }
-        }
+        // Cargar perfiles
+        try {
+            profiles = await new Promise((res, rej) => {
+                const tx = db.transaction('profiles', 'readonly');
+                const req = tx.objectStore('profiles').getAll();
+                req.onsuccess = () => res(req.result || []);
+                req.onerror = rej;
+            });
+        } catch(e) {}
 
-        for await (const entry of threadsDir.values()) {
-            if (entry.kind === 'file' && entry.name.endsWith('.json')) {
-                try {
-                    const t = JSON.parse(await (await entry.getFile()).text());
-                    threadsData.push(t);
-                } catch(e) {}
-            }
-        }
+        // Cargar hilos
+        try {
+            threadsData = await new Promise((res, rej) => {
+                const tx = db.transaction('threads', 'readonly');
+                const req = tx.objectStore('threads').getAll();
+                req.onsuccess = () => res(req.result || []);
+                req.onerror = rej;
+            });
+        } catch(e) {}
         
-        threadsData.sort((a,b) => b.id.localeCompare(a.id));
-        if (profiles.length > 0 && !profiles.some(p => p.id === activeProfileId)) activeProfileId = profiles[0].id;
+        db.close();
+    } catch(e) {
+        console.error("Error cargando desde IndexedDB", e);
     }
+    
+    threadsData.sort((a,b) => b.id.localeCompare(a.id));
+    if (profiles.length > 0 && !profiles.some(p => p.id === activeProfileId)) activeProfileId = profiles[0].id;
+}
 
-    async function finishFolderLoad() {
+async function finishFolderLoad() {
         updateStorageStatus(folderHandle.name);
         document.getElementById('clearStoredFolderBtn').style.display = 'block';
         document.body.classList.remove('app-uninitialized');
@@ -399,15 +443,20 @@
     }
 
     function openFolderDatabase() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(FOLDER_DB_NAME, FOLDER_DB_VERSION);
-            request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains(FOLDER_DB_STORE)) request.result.createObjectStore(FOLDER_DB_STORE); };
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
-    }
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(FOLDER_DB_NAME, FOLDER_DB_VERSION);
+        request.onupgradeneeded = () => { 
+            const db = request.result;
+            if (!db.objectStoreNames.contains(FOLDER_DB_STORE)) db.createObjectStore(FOLDER_DB_STORE);
+            if (!db.objectStoreNames.contains('profiles')) db.createObjectStore('profiles', { keyPath: 'id' });
+            if (!db.objectStoreNames.contains('threads')) db.createObjectStore('threads', { keyPath: 'id' });
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
 
-    async function storeFolderHandle(handle) {
+async function storeFolderHandle(handle) {
         const db = await openFolderDatabase();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(FOLDER_DB_STORE, 'readwrite');
@@ -473,16 +522,29 @@
     }
 
     async function forgetStoredFolder() {
-        folderHandle = null; profiles = []; threadsData = [];
-        await removeStoredFolderHandle();
-        updateStorageStatus('Ninguna');
-        document.getElementById('clearStoredFolderBtn').style.display = 'none';
-        showStartupOverlay('Selecciona una carpeta para comenzar.');
-        document.getElementById('feed').innerHTML = '';
-        closeHomeTools();
-    }
+    folderHandle = null; profiles = []; threadsData = [];
+    await removeStoredFolderHandle();
+    
+    try {
+        const db = await openFolderDatabase();
+        await new Promise((resolve) => {
+            const tx = db.transaction(['profiles', 'threads', FOLDER_DB_STORE], 'readwrite');
+            tx.objectStore('profiles').clear();
+            tx.objectStore('threads').clear();
+            tx.objectStore(FOLDER_DB_STORE).delete('app_settings');
+            tx.oncomplete = resolve;
+        });
+        db.close();
+    } catch(e) {}
+    
+    updateStorageStatus('Ninguna');
+    document.getElementById('clearStoredFolderBtn').style.display = 'none';
+    showStartupOverlay('Selecciona una carpeta para comenzar.');
+    document.getElementById('feed').innerHTML = '';
+    closeHomeTools();
+}
 
-    function formatUniqueHandle(inputHandle, excludeProfileId = null) {
+function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         let cleanHandle = inputHandle.replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || 'usuario';
         let testHandle = '@' + cleanHandle;
         let counter = 1;
@@ -951,14 +1013,31 @@
             if(tIdx > -1) {
                 const t = threadsData[tIdx]; const pIdx = t.posts.findIndex(p => p.id === pId);
                 if(pIdx > -1) {
+                if (pIdx === 0) {
+                    // Es el post anfitrión (índice 0). Se limpia la multimedia de TODO el hilo.
+                    for (let post of t.posts) {
+                        for (let m of (post.media || [])) {
+                            if (m.path) await deleteMediaFile(m.path);
+                            if (m.thumbPath) await deleteMediaFile(m.thumbPath);
+                            if (m.thumbnailUrl) URL.revokeObjectURL(m.thumbnailUrl);
+                        }
+                    }
+                    // Vaciar los posts por completo forzará la eliminación del hilo y sus respuestas
+                    t.posts = [];
+                } else {
+                    // Comportamiento regular para las respuestas individuales
                     const dPost = t.posts[pIdx]; 
                     for (let m of (dPost.media || [])) {
                         if (m.path) await deleteMediaFile(m.path);
                         if (m.thumbPath) await deleteMediaFile(m.thumbPath);
                         if (m.thumbnailUrl) URL.revokeObjectURL(m.thumbnailUrl);
                     }
-                    t.posts.splice(pIdx, 1); if (pIdx > 0 && t.posts[pIdx - 1]) t.posts[pIdx - 1].replyCount = Math.max(0, (t.posts[pIdx - 1].replyCount || 0) - 1);
+                    t.posts.splice(pIdx, 1); 
+                    if (pIdx > 0 && t.posts[pIdx - 1]) {
+                        t.posts[pIdx - 1].replyCount = Math.max(0, (t.posts[pIdx - 1].replyCount || 0) - 1);
+                    }
                 }
+            }
                 
                 pEl.remove();
                 if(t.posts.length === 0) { 
@@ -1295,11 +1374,12 @@ closeImageViewer = function(fromHistory = false) {
 
 // Escuchador nativo para el botón físico/gesto de ir atrás
 window.addEventListener('popstate', (e) => {
-    if (document.getElementById('imageViewerModal').style.display === 'flex') { closeImageViewer(true); return; }
-    if (document.getElementById('postModal').style.display === 'flex') { closePostModal(true); return; }
-    if (document.getElementById('editModal').style.display === 'flex') { closeEditModal(true); return; }
-    if (document.getElementById('newProfileModal').style.display === 'flex' && !isInitialProfileCreation) { closeNewProfileModal(true); return; }
-    if (document.body.classList.contains('in-thread-view')) { closeThreadView(true); return; }
+    const view = e.state ? e.state.view : null;
+    if (document.getElementById('imageViewerModal').style.display === 'flex' && view !== 'imageViewerModal') { closeImageViewer(true); return; }
+    if (document.getElementById('postModal').style.display === 'flex' && view !== 'postModal') { closePostModal(true); return; }
+    if (document.getElementById('editModal').style.display === 'flex' && view !== 'editModal') { closeEditModal(true); return; }
+    if (document.getElementById('newProfileModal').style.display === 'flex' && !isInitialProfileCreation && view !== 'newProfileModal') { closeNewProfileModal(true); return; }
+    if (document.body.classList.contains('in-thread-view') && view !== 'thread') { closeThreadView(true); return; }
 });
 
 
@@ -1319,3 +1399,18 @@ document.addEventListener('error', function(e) {
         }
     }
 }, true); // 'true' permite interceptar errores en la fase de captura
+
+
+// === INYECCIÓN: SOLICITAR PERSISTENCIA DE ALMACENAMIENTO ===
+// Evita que el navegador borre los datos de IndexedDB o el sistema de archivos cuando haya poca memoria.
+if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persist().then(function(granted) {
+        if (granted) {
+            console.log("Persistencia de almacenamiento concedida. Los datos están protegidos contra el borrado automático.");
+        } else {
+            console.warn("Persistencia denegada. El navegador podría borrar los datos si hay presión de almacenamiento.");
+        }
+    }).catch(function(error) {
+        console.error("Error al solicitar persistencia de almacenamiento:", error);
+    });
+}

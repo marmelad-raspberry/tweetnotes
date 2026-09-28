@@ -4,7 +4,7 @@
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#1d9bf0",
+  "theme_color": "#ffffff",
   "description": "Una aplicación de notas y perfiles de uso local.",
   "icons": [
     {
