@@ -267,7 +267,7 @@
             p.coverPath = filename; const thumbBlobCov = await generateThumbnail(p.coverFile, 600); const thumbFileCov = `${p.id}_cover_thumb.webp`; await writeFile(mediaDir, thumbFileCov, thumbBlobCov); p.coverThumbPath = thumbFileCov;
             delete p.coverFile;
         }
-        delete p.avatar; delete p.cover; delete p.avatarThumb; delete p.coverThumb;
+        delete p.avatar; delete p.cover; delete p.avatarThumb; delete p.coverThumb; delete p.avatarFeedThumb;
         await writeJsonFile(profilesDir, `${p.id}.json`, p);
     }
 
