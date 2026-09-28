@@ -44,12 +44,17 @@
                             const fileHandle = await mediaDir.getFileHandle(path);
                             const file = await fileHandle.getFile();
                             url = URL.createObjectURL(file);
-                            mediaCache.set(path, url); if (mediaCache.size > 100) { const first = mediaCache.keys().next().value; URL.revokeObjectURL(mediaCache.get(first)); mediaCache.delete(first); }
+                            mediaCache.set(path, url); if (mediaCache.size > 150) { const first = mediaCache.keys().next().value; URL.revokeObjectURL(mediaCache.get(first)); mediaCache.delete(first); }
                         }
                         el.dataset.blobUrl = url;
                         if (el.tagName === 'IMG' || el.tagName === 'VIDEO') el.src = url;
                         else el.style.backgroundImage = `url("${url}")`;
-                    } catch (e) {}
+                    } catch (e) {
+                        const errUrl = 'data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23eaeaea"/%3E%3Ctext x="50" y="50" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="12" fill="%23666"%3E%5BError 404%5D%3C/text%3E%3C/svg%3E';
+                        if (el.tagName === 'IMG') el.src = errUrl;
+                        else if (el.tagName === 'VIDEO') el.poster = errUrl;
+                        else el.style.backgroundImage = `url("${errUrl}")`;
+                    }
                 }
             }
         }
@@ -195,7 +200,7 @@
         } catch(e) {}
     }
 
-    async function generateThumbnail(file) {
+    async function generateThumbnail(file, maxRes = 800) {
         return new Promise((resolve) => {
             const isVid = file.type.startsWith('video/');
             const url = URL.createObjectURL(file);
@@ -211,11 +216,11 @@
 
                 const finish = () => {
                     if(isResolved) return; isResolved = true;
-                    const scale = Math.min(800 / (video.videoWidth || 800), 800 / (video.videoHeight || 800));
+                    const scale = Math.min(maxRes / (video.videoWidth || maxRes), maxRes / (video.videoHeight || maxRes));
                     canvas.width = (video.videoWidth || 400) * scale;
                     canvas.height = (video.videoHeight || 400) * scale;
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    canvas.toBlob(blob => { URL.revokeObjectURL(url); resolve(blob); }, 'image/jpeg', 0.6);
+                    canvas.toBlob(blob => { URL.revokeObjectURL(url); resolve(blob); }, 'image/webp', 0.6);
                 };
 
                 video.addEventListener('loadeddata', () => { video.currentTime = Math.min(1, video.duration / 2 || 1); });
@@ -225,11 +230,11 @@
             } else {
                 const img = new Image();
                 img.onload = () => {
-                    const scale = Math.min(800 / img.width, 800 / img.height);
+                    const scale = Math.min(maxRes / img.width, maxRes / img.height);
                     canvas.width = img.width * scale;
                     canvas.height = img.height * scale;
                     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    canvas.toBlob(blob => { URL.revokeObjectURL(url); resolve(blob); }, 'image/jpeg', 0.6);
+                    canvas.toBlob(blob => { URL.revokeObjectURL(url); resolve(blob); }, 'image/webp', 0.6);
                 };
                 img.onerror = () => { URL.revokeObjectURL(url); resolve(new Blob([])); };
                 img.src = url;
@@ -252,14 +257,14 @@
             const ext = p.avatarFile.name.split('.').pop() || 'png';
             const filename = `${p.id}_avatar.${ext}`;
             await writeFile(mediaDir, filename, p.avatarFile);
-            p.avatarPath = filename; const thumbBlobAv = await generateThumbnail(p.avatarFile); const thumbFileAv = `${p.id}_avatar_thumb.jpg`; await writeFile(mediaDir, thumbFileAv, thumbBlobAv); p.avatarThumbPath = thumbFileAv;
+            p.avatarPath = filename; const thumbBlobAv = await generateThumbnail(p.avatarFile, 256); const thumbFileAv = `${p.id}_avatar_thumb.webp`; await writeFile(mediaDir, thumbFileAv, thumbBlobAv); p.avatarThumbPath = thumbFileAv; const thumbBlobAvFeed = await generateThumbnail(p.avatarFile, 128); const thumbFileAvFeed = `${p.id}_avatar_feed_thumb.webp`; await writeFile(mediaDir, thumbFileAvFeed, thumbBlobAvFeed); p.avatarFeedThumbPath = thumbFileAvFeed;
             delete p.avatarFile;
         }
         if (p.coverFile) {
             const ext = p.coverFile.name.split('.').pop() || 'png';
             const filename = `${p.id}_cover.${ext}`;
             await writeFile(mediaDir, filename, p.coverFile);
-            p.coverPath = filename; const thumbBlobCov = await generateThumbnail(p.coverFile); const thumbFileCov = `${p.id}_cover_thumb.jpg`; await writeFile(mediaDir, thumbFileCov, thumbBlobCov); p.coverThumbPath = thumbFileCov;
+            p.coverPath = filename; const thumbBlobCov = await generateThumbnail(p.coverFile, 600); const thumbFileCov = `${p.id}_cover_thumb.webp`; await writeFile(mediaDir, thumbFileCov, thumbBlobCov); p.coverThumbPath = thumbFileCov;
             delete p.coverFile;
         }
         delete p.avatar; delete p.cover; delete p.avatarThumb; delete p.coverThumb;
@@ -285,7 +290,7 @@
                     savePost.media[j].path = filename;
 
                     if (m.thumbBlob) {
-                        const thumbFilename = `${origPost.id}_${j}_thumb.jpg`;
+                        const thumbFilename = `${origPost.id}_${j}_thumb.webp`;
                         await writeFile(mediaDir, thumbFilename, m.thumbBlob);
                         m.thumbPath = thumbFilename;
                         savePost.media[j].thumbPath = thumbFilename;
@@ -653,8 +658,8 @@
 
         const avFile = document.getElementById('newProfilePic').files[0];
         const covFile = document.getElementById('newCoverPic').files[0];
-        if (avFile) { np.avatarFile = avFile; np.avatar = URL.createObjectURL(avFile); np.avatarThumb = URL.createObjectURL(await generateThumbnail(avFile)); }
-        if (covFile) { np.coverFile = covFile; np.cover = URL.createObjectURL(covFile); np.coverThumb = URL.createObjectURL(await generateThumbnail(covFile)); }
+        if (avFile) { np.avatarFile = avFile; np.avatar = URL.createObjectURL(avFile); np.avatarThumb = URL.createObjectURL(await generateThumbnail(avFile, 256)); np.avatarFeedThumb = URL.createObjectURL(await generateThumbnail(avFile, 128)); }
+        if (covFile) { np.coverFile = covFile; np.cover = URL.createObjectURL(covFile); np.coverThumb = URL.createObjectURL(await generateThumbnail(covFile, 600)); }
 
         profiles.push(np); activeProfileId = np.id;
         await saveProfileToFolder(np);
@@ -677,9 +682,17 @@
         const p = profiles.find(x => x.id === activeProfileId) || profiles[0]; if (!p) return;
         document.getElementById('displayName').innerText = p.name; document.getElementById('displayHandle').innerText = p.handle;
         const b = document.getElementById('displayBio'); if (p.bio) { b.innerText = p.bio; b.style.display = 'block'; } else { b.innerText = ''; b.style.display = 'none'; }
-        setMediaElement(document.getElementById('profilePic'), p.avatar || p.avatarPath);
+        const picEl = document.getElementById('profilePic');
+        setMediaElement(picEl, p.avatarThumb || p.avatarThumbPath || p.avatar || p.avatarPath);
+        picEl.style.cursor = 'pointer';
+        picEl.onclick = () => { if(p.avatarPath || p.avatar) openFullViewer([{ path: p.avatarPath, file: p.avatarFile, thumbnailUrl: p.avatarThumbPath || p.avatarThumb || p.avatarPath }], 0); };
+
         setMediaElement(document.getElementById('modalComposeAvatar'), p.avatarThumb || p.avatarThumbPath || p.avatar || p.avatarPath);
-        setMediaElement(document.getElementById('coverPhoto'), p.cover || p.coverPath);
+
+        const coverEl = document.getElementById('coverPhoto');
+        setMediaElement(coverEl, p.coverThumb || p.coverThumbPath || p.cover || p.coverPath);
+        coverEl.style.cursor = 'pointer';
+        coverEl.onclick = () => { if(p.coverPath || p.cover) openFullViewer([{ path: p.coverPath, file: p.coverFile, thumbnailUrl: p.coverThumbPath || p.coverThumb || p.coverPath }], 0); };
     }
 
     function getMainPost(t) { return t.posts?.length ? t.posts[0] : null; }
@@ -798,7 +811,7 @@
             threadsData = threadsToSave;
             
             const dp = profiles.find(p => p.id === dId);
-            if(dp) { if(dp.avatarPath) await deleteMediaFile(dp.avatarPath); if(dp.avatarThumbPath) await deleteMediaFile(dp.avatarThumbPath); if(dp.coverPath) await deleteMediaFile(dp.coverPath); if(dp.coverThumbPath) await deleteMediaFile(dp.coverThumbPath); }
+            if(dp) { if(dp.avatarPath) await deleteMediaFile(dp.avatarPath); if(dp.avatarThumbPath) await deleteMediaFile(dp.avatarThumbPath); if(dp.avatarFeedThumbPath) await deleteMediaFile(dp.avatarFeedThumbPath); if(dp.coverPath) await deleteMediaFile(dp.coverPath); if(dp.coverThumbPath) await deleteMediaFile(dp.coverThumbPath); }
             profiles = profiles.filter(p => p.id !== dId);
             await deleteProfileFromFolder(dId);
             
@@ -921,8 +934,8 @@
         const pi = document.getElementById('editProfilePic'); const ci = document.getElementById('editCoverPic');
         const p = profiles.find(x => x.id === activeProfileId);
         if (nn) p.name = nn; if (nh) p.handle = formatUniqueHandle(nh, p.id); p.bio = nb;
-        if (pi.files[0]) { if(p.avatarPath) await deleteMediaFile(p.avatarPath); if(p.avatarThumbPath) await deleteMediaFile(p.avatarThumbPath); p.avatarFile = pi.files[0]; p.avatar = URL.createObjectURL(pi.files[0]); p.avatarThumb = URL.createObjectURL(await generateThumbnail(pi.files[0])); }
-        if (ci.files[0]) { if(p.coverPath) await deleteMediaFile(p.coverPath); if(p.coverThumbPath) await deleteMediaFile(p.coverThumbPath); p.coverFile = ci.files[0]; p.cover = URL.createObjectURL(ci.files[0]); p.coverThumb = URL.createObjectURL(await generateThumbnail(ci.files[0])); }
+        if (pi.files[0]) { if(p.avatarPath) await deleteMediaFile(p.avatarPath); if(p.avatarThumbPath) await deleteMediaFile(p.avatarThumbPath); if(p.avatarFeedThumbPath) await deleteMediaFile(p.avatarFeedThumbPath); p.avatarFile = pi.files[0]; p.avatar = URL.createObjectURL(pi.files[0]); p.avatarThumb = URL.createObjectURL(await generateThumbnail(pi.files[0], 256)); p.avatarFeedThumb = URL.createObjectURL(await generateThumbnail(pi.files[0], 128)); }
+        if (ci.files[0]) { if(p.coverPath) await deleteMediaFile(p.coverPath); if(p.coverThumbPath) await deleteMediaFile(p.coverThumbPath); p.coverFile = ci.files[0]; p.cover = URL.createObjectURL(ci.files[0]); p.coverThumb = URL.createObjectURL(await generateThumbnail(ci.files[0], 600)); }
         await saveProfileToFolder(p); renderCurrentProfileUI(); if (currentTab === 'profile') renderProfileContent(); else renderAllFeed();
         pi.value = ''; ci.value = ''; closeEditModal();
     }
@@ -999,7 +1012,7 @@
                 ${text ? `<div class="post-content">${div.dataset.isAdvanced === 'true' ? text : renderTextWithHashtags(text)}</div>` : ''}
             </div>
         `;
-        setMediaElement(div.querySelector('.post-avatar'), ap.avatarThumb || ap.avatarThumbPath || ap.avatar || ap.avatarPath);
+        setMediaElement(div.querySelector('.post-avatar'), ap.avatarFeedThumb || ap.avatarFeedThumbPath || ap.avatarThumb || ap.avatarThumbPath || ap.avatar || ap.avatarPath);
         div.querySelectorAll('.profile-link').forEach(t => { const go = e => openProfile(aId, e); t.addEventListener('click', go); t.addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' ') go(e); }); });
         const pm = div.querySelector('.post-main'); if (mArr && mArr.length > 0) pm.appendChild(buildMediaGridForPost(mArr));
         const act = document.createElement('div'); act.className = 'post-actions';
@@ -1288,3 +1301,21 @@ window.addEventListener('popstate', (e) => {
     if (document.getElementById('newProfileModal').style.display === 'flex' && !isInitialProfileCreation) { closeNewProfileModal(true); return; }
     if (document.body.classList.contains('in-thread-view')) { closeThreadView(true); return; }
 });
+
+
+// === INYECCIÓN: FALLBACK MULTIMEDIA (404) ===
+document.addEventListener('error', function(e) {
+    const target = e.target;
+    if (target && target.tagName) {
+        const tag = target.tagName.toLowerCase();
+        const errUrl = 'data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23eaeaea"/%3E%3Ctext x="50" y="50" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="12" fill="%23666"%3E%5BError 404%5D%3C/text%3E%3C/svg%3E';
+        
+        if (tag === 'img' && target.src !== errUrl) {
+            target.onerror = null; // Previene bucles infinitos
+            target.src = errUrl;
+        } else if (tag === 'video' && target.poster !== errUrl) {
+            target.onerror = null;
+            target.poster = errUrl;
+        }
+    }
+}, true); // 'true' permite interceptar errores en la fase de captura
