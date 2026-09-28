@@ -19,26 +19,11 @@
     <link rel="icon" href="icon-512.png" sizes="512x512">
     <link rel="apple-touch-icon" href="icon-192.png">
 </head>
-<body class="app-uninitialized">
-    <div class="startup-overlay" id="startupOverlay">
-        <div class="startup-card">
-            <h2 id="startupTitle">Elige una carpeta</h2>
-            <p id="startupMessage">Selecciona una carpeta en tu dispositivo para gestionar de forma nativa tus perfiles, hilos y multimedia sin depender del navegador.</p>
-            <button class="startup-btn startup-primary" id="useStoredFolderBtn" onclick="requestStoredFolderAccess()" style="display:none;">Usar carpeta guardada</button>
-            <button class="startup-btn startup-secondary" onclick="chooseStorageFolder()">Seleccionar carpeta</button>
-        </div>
-    </div>
+<body >
+    
 
     <div class="container">
-        <div class="home-toolbar" id="homeToolbar">
-            <div class="home-tools-wrapper">
-                <button class="home-tools-btn" onclick="toggleHomeTools(event)" aria-label="Más opciones" title="Más opciones">⋮</button>
-                <div class="home-tools-dropdown" id="homeToolsDropdown">
-                    <div id="storageStatus" class="home-tools-status"><strong>Carpeta Activa:</strong> Ninguna</div>
-                    <button class="storage-btn danger" id="clearStoredFolderBtn" onclick="forgetStoredFolder()" style="display: none;">Desconectar carpeta</button>
-                </div>
-            </div>
-        </div>
+        
 
         <div id="threadHeader" class="modal-header" style="display: none;">
             <div style="display: flex; align-items: center; gap: 20px;">

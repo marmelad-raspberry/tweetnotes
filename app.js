@@ -164,10 +164,7 @@
         }
     }
 
-    function updateStorageStatus(message) {
-        const el = document.getElementById('storageStatus');
-        if (el) el.innerHTML = `<strong>Carpeta:</strong> ${message}`;
-    }
+    
 
     async function writeFile(dirHandle, filename, data) {
         const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
@@ -404,43 +401,24 @@ async function loadStateFromFolder() {
 }
 
 async function finishFolderLoad() {
-        updateStorageStatus(folderHandle.name);
-        document.getElementById('clearStoredFolderBtn').style.display = 'block';
-        document.body.classList.remove('app-uninitialized');
-
         if (profiles.length === 0) {
             isInitialProfileCreation = true;
             document.getElementById('feed').innerHTML = '';
             openNewProfileModal(true);
-            hideStartupOverlay();
             return false;
         }
 
         renderCurrentProfileUI();
         renderAllFeed();
         switchTab('home');
-        hideStartupOverlay();
         return true;
     }
 
-    function showStartupOverlay(message = null, storedHandle = null) {
-        const overlay = document.getElementById('startupOverlay');
-        const messageEl = document.getElementById('startupMessage');
-        const storedBtn = document.getElementById('useStoredFolderBtn');
-        document.body.classList.add('app-uninitialized');
-        overlay.style.display = 'flex';
-        if (message) messageEl.textContent = message;
-        if (storedHandle) { storedBtn.style.display = 'block'; storedBtn.textContent = `Usar carpeta: ${storedHandle.name}`; } 
-        else { storedBtn.style.display = 'none'; }
-    }
+    
 
-    function hideStartupOverlay() { document.getElementById('startupOverlay').style.display = 'none'; document.body.classList.remove('app-uninitialized'); }
+    
 
-    async function activateFolder(handle) {
-        folderHandle = handle;
-        await loadStateFromFolder();
-        return finishFolderLoad();
-    }
+    
 
     function openFolderDatabase() {
     return new Promise((resolve, reject) => {
@@ -456,93 +434,19 @@ async function finishFolderLoad() {
     });
 }
 
-async function storeFolderHandle(handle) {
-        const db = await openFolderDatabase();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction(FOLDER_DB_STORE, 'readwrite');
-            tx.objectStore(FOLDER_DB_STORE).put(handle, FOLDER_DB_KEY);
-            tx.oncomplete = () => { db.close(); resolve(); };
-            tx.onerror = () => { db.close(); reject(tx.error); };
-        });
-    }
 
-    async function getStoredFolderHandle() {
-        try {
-            const db = await openFolderDatabase();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(FOLDER_DB_STORE, 'readonly');
-                const request = tx.objectStore(FOLDER_DB_STORE).get(FOLDER_DB_KEY);
-                request.onsuccess = () => resolve(request.result || null);
-                request.onerror = () => reject(request.error);
-                tx.oncomplete = () => db.close();
-            });
-        } catch(e) { return null; }
-    }
 
-    async function removeStoredFolderHandle() {
-        try {
-            const db = await openFolderDatabase();
-            await new Promise((resolve, reject) => {
-                const tx = db.transaction(FOLDER_DB_STORE, 'readwrite');
-                tx.objectStore(FOLDER_DB_STORE).delete(FOLDER_DB_KEY);
-                tx.oncomplete = resolve;
-                tx.onerror = () => reject();
-            });
-            db.close();
-        } catch (e) {}
-    }
-
-    async function ensureFolderPermission(handle, requestIfNeeded = false) {
-        if (!handle) return false;
-        try {
-            if ((await handle.queryPermission({ mode: 'readwrite' })) === 'granted') return true;
-            if (requestIfNeeded) return (await handle.requestPermission({ mode: 'readwrite' })) === 'granted';
-        } catch (e) {}
-        return false;
-    }
-
-    async function requestStoredFolderAccess() {
-        try {
-            const storedHandle = await getStoredFolderHandle();
-            if (!storedHandle) { await chooseStorageFolder(); return; }
-            if (!(await ensureFolderPermission(storedHandle, true))) return;
-            await activateFolder(storedHandle);
-            closeHomeTools();
-        } catch (e) { alert('No se pudo recuperar la carpeta.'); }
-    }
-
-    async function chooseStorageFolder() {
-        if (!('showDirectoryPicker' in window)) { alert('Navegador no compatible.'); return; }
-        try {
-            const selected = await window.showDirectoryPicker({ mode: 'readwrite' });
-            await storeFolderHandle(selected);
-            await activateFolder(selected);
-            closeHomeTools();
-        } catch (e) { }
-    }
-
-    async function forgetStoredFolder() {
-    folderHandle = null; profiles = []; threadsData = [];
-    await removeStoredFolderHandle();
     
-    try {
-        const db = await openFolderDatabase();
-        await new Promise((resolve) => {
-            const tx = db.transaction(['profiles', 'threads', FOLDER_DB_STORE], 'readwrite');
-            tx.objectStore('profiles').clear();
-            tx.objectStore('threads').clear();
-            tx.objectStore(FOLDER_DB_STORE).delete('app_settings');
-            tx.oncomplete = resolve;
-        });
-        db.close();
-    } catch(e) {}
+
     
-    updateStorageStatus('Ninguna');
-    document.getElementById('clearStoredFolderBtn').style.display = 'none';
-    showStartupOverlay('Selecciona una carpeta para comenzar.');
-    document.getElementById('feed').innerHTML = '';
-    closeHomeTools();
-}
+
+    
+
+    
+
+    
+
+    
 
 function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         let cleanHandle = inputHandle.replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || 'usuario';
@@ -556,11 +460,10 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
 
     document.addEventListener('click', function(e) {
         if(!e.target.closest('.post-options-btn') && !e.target.closest('.profile-dropdown-btn')) document.querySelectorAll('.post-dropdown').forEach(d => d.style.display = 'none');
-        if(!e.target.closest('.home-tools-wrapper')) closeHomeTools();
-    });
+        });
 
-    function toggleHomeTools(e) { e.stopPropagation(); const menu = document.getElementById('homeToolsDropdown'); menu.classList.toggle('open'); }
-    function closeHomeTools() { const menu = document.getElementById('homeToolsDropdown'); if (menu) menu.classList.remove('open'); }
+    
+    
 
     function switchTab(tab, searchQuery = null) {
         const previousTab = currentTab; currentTab = tab;
@@ -568,9 +471,9 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         document.getElementById('tabHome').classList.toggle('active', tab === 'home');
         document.getElementById('tabSearch').classList.toggle('active', tab === 'search');
         document.getElementById('tabProfile').classList.toggle('active', tab === 'profile');
-        document.getElementById('homeToolbar').style.display = tab === 'home' ? 'flex' : 'none';
+        
         document.getElementById('searchPage').style.display = tab === 'search' ? 'block' : 'none';
-        closeHomeTools();
+        
 
         if (!document.body.classList.contains('in-thread-view')) {
             document.getElementById('coverPhoto').style.display = tab === 'profile' ? 'block' : 'none';
@@ -729,7 +632,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
 
         isInitialProfileCreation = false;
         document.getElementById('newProfileModal').style.display = 'none';
-        renderCurrentProfileUI(); renderAllFeed(); switchTab('home'); hideStartupOverlay();
+        renderCurrentProfileUI(); renderAllFeed(); switchTab('home'); 
     }
 
     async function switchProfile(id) { activeProfileId = id; await saveSettingsToFolder(); document.getElementById('profileDropdown').style.display = 'none'; renderCurrentProfileUI(); if (currentTab === 'profile') renderProfileContent(); else updateFeedVisibility(); }
@@ -737,7 +640,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
     async function openProfile(pid, e = null) {
         if (e) { e.preventDefault(); e.stopPropagation(); }
         const p = profiles.find(x => x.id === pid); if (!p) return;
-        activeProfileId = p.id; composerProfileId = p.id; await saveSettingsToFolder(); closeHomeTools(); document.getElementById('profileDropdown').style.display = 'none'; renderCurrentProfileUI(); switchTab('profile'); window.scrollTo(0, 0);
+        activeProfileId = p.id; composerProfileId = p.id; await saveSettingsToFolder();  document.getElementById('profileDropdown').style.display = 'none'; renderCurrentProfileUI(); switchTab('profile'); window.scrollTo(0, 0);
     }
 
     function renderCurrentProfileUI() {
@@ -803,7 +706,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         }
         
         if (!threadsData.find(t => t.id === tid)) return;
-        currentTab = 'home'; document.getElementById('tabHome').classList.add('active'); document.getElementById('tabSearch').classList.remove('active'); document.getElementById('tabProfile').classList.remove('active'); document.getElementById('homeToolbar').style.display = 'flex'; document.getElementById('searchPage').style.display = 'none'; document.getElementById('coverPhoto').style.display = 'none'; document.querySelector('.profile-header').style.display = 'none'; 
+        currentTab = 'home'; document.getElementById('tabHome').classList.add('active'); document.getElementById('tabSearch').classList.remove('active'); document.getElementById('tabProfile').classList.remove('active');  document.getElementById('searchPage').style.display = 'none'; document.getElementById('coverPhoto').style.display = 'none'; document.querySelector('.profile-header').style.display = 'none'; 
         renderAllFeed();
         
         while (virtualFeedQueue.length > 0 && !document.querySelector(`.thread-container[data-thread-id="${tid}"]`)) {
@@ -1182,13 +1085,14 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
     sInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); renderSearchResults(this.value); } });
 
     async function initializeApp() {
-        showStartupOverlay('Selecciona una carpeta para comenzar.');
         try {
-            const sHandle = await getStoredFolderHandle();
-            if (!sHandle) { updateStorageStatus('Ninguna'); return; }
-            if (await ensureFolderPermission(sHandle, false)) { await activateFolder(sHandle); return; }
-            showStartupOverlay(`Puedes volver a usar la carpeta guardada "${sHandle.name}" o seleccionar otra.`, sHandle);
-        } catch (e) { updateStorageStatus('Ninguna'); showStartupOverlay('Selecciona una carpeta para comenzar.'); }
+            folderHandle = await navigator.storage.getDirectory();
+            await loadStateFromFolder();
+            await finishFolderLoad();
+        } catch (e) {
+            console.error('Error al inicializar OPFS:', e);
+            alert('Tu navegador no soporta el sistema de archivos privado (OPFS).');
+        }
     }
 
     initializeApp();
