@@ -687,7 +687,7 @@
     function getProfileReplies(pid) { const r = []; threadsData.forEach(t => { const m = getMainPost(t); if (!m || !t.posts) return; t.posts.slice(1).forEach(rp => { if (rp.authorId === pid) r.push({ thread: t, mainPost: m, reply: rp }); }); }); return r; }
 
     function createPostElement(p, onClick = null) {
-        const div = document.createElement('div'); div.className = 'post'; div.dataset.id = p.id; div.dataset.rawText = p.text || ''; div.dataset.isAdvanced = p.isAdvanced || false; div.dataset.replyCount = p.replyCount || 0; div.dataset.authorId = p.authorId; div.mediaData = p.media || [];
+        const div = document.createElement('div'); div.className = 'post'; div.dataset.id = p.id; div.dataset.rawText = p.text || ''; div.dataset.isAdvanced = p.isAdvanced || false; div.dataset.replyCount = p.replyCount || 0; div.dataset.authorId = p.authorId; div.dataset.createdAt = p.createdAt || 'N/A'; div.mediaData = p.media || [];
         if (onClick) div.onclick = onClick; renderPostContent(div, p.text, p.media); return div;
     }
 
@@ -988,11 +988,12 @@
     function renderPostContent(div, text, mArr) {
         const aId = div.dataset.authorId || activeProfileId; const ap = profiles.find(p => p.id === aId) || profiles[0]; if (!ap) return;
         const rc = div.dataset.replyCount || '0'; const rcHtml = rc !== '0' ? rc : '';
+        let cDate = div.dataset.createdAt; let dateStr = 'N/A'; if(cDate && cDate !== 'N/A'){ let d = new Date(cDate); if(!isNaN(d.getTime())){ let now = new Date(); let today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); let postDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()); let diffDays = Math.round((today - postDay) / 86400000); if(diffDays === 0) { dateStr = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); } else if(diffDays === 1) { dateStr = 'Ayer'; } else if(diffDays >= 7 && diffDays < 14) { dateStr = 'Hace una semana'; } else if(diffDays >= 30) { let m = Math.floor(diffDays / 30); dateStr = 'Hace ' + m + (m === 1 ? ' mes' : ' meses'); } else { dateStr = d.toLocaleDateString(); } } }
         div.innerHTML = `
             <div class="post-left-col"><div class="post-avatar sync-avatar profile-link" role="button" tabindex="0"></div><div class="thread-line"></div></div>
             <div class="post-main">
                 <div class="post-header" style="justify-content: space-between; width: 100%;">
-                    <div style="display: flex; gap: 4px; align-items: center;"><span class="post-author sync-name profile-link" role="button" tabindex="0">${escapeHtml(ap.name || 'Usuario')}</span><span class="post-handle sync-handle profile-link" role="button" tabindex="0">${escapeHtml(ap.handle || '@usuario')} · Ahora</span></div>
+                    <div style="display: flex; gap: 4px; align-items: center;"><span class="post-author sync-name profile-link" role="button" tabindex="0">${escapeHtml(ap.name || 'Usuario')}</span><span class="post-handle sync-handle profile-link" role="button" tabindex="0">${escapeHtml(ap.handle || '@usuario')} · ${dateStr}</span></div>
                     <div class="post-options" style="position: relative;"><button class="post-options-btn" onclick="toggleDropdown(event, this)">⋮</button><div class="post-dropdown"><div class="post-dropdown-item" onclick="editPost(event, this)">Editar</div><div class="post-dropdown-item danger" onclick="deletePost(event, this)">Eliminar</div></div></div>
                 </div>
                 ${text ? `<div class="post-content">${div.dataset.isAdvanced === 'true' ? text : renderTextWithHashtags(text)}</div>` : ''}
@@ -1036,7 +1037,7 @@
                 }
             }
         } else {
-            const np = { id: 'post_' + Date.now(), text: text, authorId: selId, isAdvanced: window.isAdvancedMode, replyCount: 0, media: [...selectedMediaFiles] };
+            const np = { id: 'post_' + Date.now(), text: text, authorId: selId, isAdvanced: window.isAdvancedMode, replyCount: 0, media: [...selectedMediaFiles], createdAt: new Date().toISOString() };
             if (replyingToThread) {
             const tIdx = threadsData.findIndex(th => th.id === replyingToThread.dataset.threadId);
             if (tIdx > -1) {
@@ -1151,3 +1152,139 @@ if (_pt) {
         document.execCommand('insertText', false, text);
     });
 }
+
+// === INYECCIÓN DE FUNCIONALIDADES SOLICITADAS ===
+
+// 1. Scroll hacia arriba al cambiar de pestaña
+const _originalSwitchTab = switchTab;
+switchTab = function(tab, searchQuery = null) {
+    _originalSwitchTab(tab, searchQuery);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+// 2. Estado "Guardando..." en botones de Perfil (Crear y Editar)
+const _originalCreateNewProfile = createNewProfile;
+createNewProfile = async function() {
+    const btn = document.querySelector('#newProfileModal .submit-btn');
+    const origText = btn ? btn.innerText : 'Crear';
+    if (btn) {
+        btn.innerText = 'Guardando...';
+        btn.disabled = true;
+    }
+    try {
+        await _originalCreateNewProfile();
+        // Limpiamos el historial porque la función original cierra el modal directamente
+        if (history.state && history.state.view === 'newProfileModal') {
+            history.back();
+        }
+    } finally {
+        if (btn) {
+            btn.innerText = origText;
+            btn.disabled = false;
+        }
+    }
+};
+
+const _originalSaveProfile = saveProfile;
+saveProfile = async function() {
+    const btn = document.querySelector('#editModal .submit-btn');
+    const origText = btn ? btn.innerText : 'Guardar';
+    if (btn) {
+        btn.innerText = 'Guardando...';
+        btn.disabled = true;
+    }
+    try {
+        await _originalSaveProfile();
+    } finally {
+        if (btn) {
+            btn.innerText = origText;
+            btn.disabled = false;
+        }
+    }
+};
+
+const _originalSubmitPost = submitPost;
+submitPost = async function() {
+    const modalVisible = document.getElementById('postModal').style.display === 'flex';
+    await _originalSubmitPost();
+    // Limpiamos historial si el post se envió exitosamente y se ocultó el modal
+    if (modalVisible && document.getElementById('postModal').style.display === 'none') {
+        if (history.state && history.state.view === 'postModal') history.back();
+    }
+};
+
+// 3. Detección del botón "Volver Atrás" de Android a través de History API
+function _pushStateIfMissing(stateName) {
+    if (!history.state || history.state.view !== stateName) {
+        history.pushState({ view: stateName }, '');
+    }
+}
+
+// Interceptamos la apertura y cierre del hilo
+const _originalViewThread = viewThread;
+viewThread = function(el, e) {
+    if (!document.body.classList.contains('in-thread-view')) _pushStateIfMissing('thread');
+    _originalViewThread(el, e);
+};
+const _originalCloseThreadView = closeThreadView;
+closeThreadView = function(fromHistory = false) {
+    _originalCloseThreadView();
+    if (fromHistory !== true && history.state && history.state.view === 'thread') history.back();
+};
+
+// Interceptamos Modal de Edición
+const _originalOpenEditModal = openEditModal;
+openEditModal = function() {
+    _pushStateIfMissing('editModal');
+    _originalOpenEditModal();
+};
+const _originalCloseEditModal = closeEditModal;
+closeEditModal = function(fromHistory = false) {
+    _originalCloseEditModal();
+    if (fromHistory !== true && history.state && history.state.view === 'editModal') history.back();
+};
+
+// Interceptamos Modal de Nuevo Perfil
+const _originalOpenNewProfileModal = openNewProfileModal;
+openNewProfileModal = function(initial = false) {
+    if (!initial) _pushStateIfMissing('newProfileModal');
+    _originalOpenNewProfileModal(initial);
+};
+const _originalCloseNewProfileModal = closeNewProfileModal;
+closeNewProfileModal = function(fromHistory = false) {
+    _originalCloseNewProfileModal();
+    if (fromHistory !== true && history.state && history.state.view === 'newProfileModal') history.back();
+};
+
+// Interceptamos Modal de Redacción (Post)
+const _originalOpenPostModal = openPostModal;
+openPostModal = function(pid = null) {
+    _pushStateIfMissing('postModal');
+    _originalOpenPostModal(pid);
+};
+const _originalClosePostModal = closePostModal;
+closePostModal = function(fromHistory = false) {
+    _originalClosePostModal();
+    if (fromHistory !== true && history.state && history.state.view === 'postModal') history.back();
+};
+
+// Interceptamos el Visor de Imágenes Completo
+const _originalOpenFullViewer = openFullViewer;
+openFullViewer = async function(mediaArr, index) {
+    _pushStateIfMissing('imageViewerModal');
+    await _originalOpenFullViewer(mediaArr, index);
+};
+const _originalCloseImageViewer = closeImageViewer;
+closeImageViewer = function(fromHistory = false) {
+    _originalCloseImageViewer();
+    if (fromHistory !== true && history.state && history.state.view === 'imageViewerModal') history.back();
+};
+
+// Escuchador nativo para el botón físico/gesto de ir atrás
+window.addEventListener('popstate', (e) => {
+    if (document.getElementById('imageViewerModal').style.display === 'flex') { closeImageViewer(true); return; }
+    if (document.getElementById('postModal').style.display === 'flex') { closePostModal(true); return; }
+    if (document.getElementById('editModal').style.display === 'flex') { closeEditModal(true); return; }
+    if (document.getElementById('newProfileModal').style.display === 'flex' && !isInitialProfileCreation) { closeNewProfileModal(true); return; }
+    if (document.body.classList.contains('in-thread-view')) { closeThreadView(true); return; }
+});

@@ -1,0 +1,175 @@
+/* 
+ * =========================================
+ * TEMA iOS - CAPA DE ESTILOS VISUALES 
+ * =========================================
+ */
+
+:root {
+    --primary-blue: #007AFF; /* Azul nativo de iOS */
+    --primary-hover: #0056b3;
+    --bg-secondary: #F2F2F7; /* Fondo agrupado de iOS */
+    --border-color: rgba(60, 60, 67, 0.18); /* Bordes sutiles */
+    --ios-easing: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-color: #000000;
+        --bg-secondary: #1C1C1E;
+        --border-color: rgba(84, 84, 88, 0.65);
+    }
+}
+
+/* Tipografía general */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Efecto Cristal (Blur) en Barras Superiores e Inferiores */
+.modal-header, .home-toolbar, .search-page, .bottom-tabs {
+    background: #ffffff !important;
+    
+    
+    border-color: var(--border-color) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+    .modal-header, .home-toolbar, .search-page, .bottom-tabs {
+        background: #1c1c1e !important;
+    }
+}
+
+/* Animaciones y diseño de la Barra Inferior (Tab Bar) */
+.bottom-tabs {
+    height: 83px !important; /* Altura iOS, considerando la barra de inicio */
+    padding-bottom: 20px;
+}
+.bottom-tabs .tab {
+    transition: transform 0.2s var(--ios-easing);
+}
+.bottom-tabs .tab:active {
+    transform: scale(0.85);
+    
+}
+.bottom-tabs .tab.active {
+    border-bottom: none !important;
+    color: var(--primary-blue) !important;
+}
+
+/* Rediseño de Modales estilo 'Sheet' (Desplegables desde abajo) */
+.modal {
+    align-items: flex-end !important; /* Alineación abajo */
+    padding: 0 !important;
+    background: #000000 !important;
+    animation: fadeInModal 0.3s ease forwards;
+}
+
+.modal-content {
+    border-radius: 20px 20px 0 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    height: auto;
+    max-height: 92vh !important;
+    padding-bottom: env(safe-area-inset-bottom, 30px);
+    animation: slideUpSheet 0.4s var(--ios-easing) forwards;
+}
+
+/* Header del Modal al estilo Navegación iOS */
+.modal-header {
+    border-bottom: 0.5px solid var(--border-color) !important;
+    border-radius: 20px 20px 0 0;
+}
+.modal-header h2 {
+    font-size: 17px !important;
+    font-weight: 600 !important;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%); /* Centrado estricto como en iOS */
+}
+
+/* Botones de acción del Modal */
+.close-btn {
+    color: var(--primary-blue) !important;
+    background: transparent !important;
+    font-size: 17px !important;
+    font-weight: 400 !important;
+    width: auto !important;
+    padding: 0 8px;
+}
+.close-btn:active {
+    opacity: 0.5;
+}
+
+/* Inputs y Buscadores redondeados */
+.search-box {
+    border-radius: 10px !important;
+    background: var(--bg-secondary) !important;
+    border: none !important;
+    height: 36px !important;
+}
+
+.input-text, .input-textarea, .compose-textarea {
+    background: var(--bg-secondary) !important;
+    border-radius: 10px !important;
+    padding: 12px !important;
+    box-sizing: border-box;
+}
+.input-group {
+    border: none !important;
+    padding: 0 !important;
+}
+.input-group label {
+    margin-bottom: 6px;
+    margin-left: 4px;
+    font-weight: 500;
+}
+
+/* Botones Principales estilo cápsula */
+.submit-btn, .startup-btn {
+    border-radius: 14px !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.02em;
+    transition: transform 0.1s ease, opacity 0.1s ease;
+}
+.submit-btn:active, .startup-btn:active {
+    transform: scale(0.97);
+    opacity: 0.8;
+}
+
+/* Botón flotante de escritura (FAB) con rebote */
+.write-post-btn-fixed {
+    background-color: var(--primary-blue) !important;
+    box-shadow: 0 4px 16px rgba(0, 122, 255, 0.4) !important;
+    transition: transform 0.2s var(--ios-easing);
+}
+.write-post-btn-fixed:active {
+    transform: scale(0.85);
+}
+
+/* Posts (Celdas estilo lista de iOS) */
+.post {
+    transition: background-color 0.15s ease;
+}
+.post:active {
+    background-color: var(--border-color) !important;
+}
+
+/* Avatares y Multimedia */
+.profile-pic, .post-avatar, .search-profile-avatar, .media-item-wrap, .compose-avatar {
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+.media-grid {
+    border-radius: 14px !important;
+    border: 0.5px solid var(--border-color) !important;
+}
+
+/* Animaciones Keyframes */
+@keyframes slideUpSheet {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+@keyframes fadeInModal {
+    from { background: #000000; }
+    to { background: #000000; }
+}

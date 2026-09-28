@@ -55,12 +55,14 @@
         .profile-response-context .context-label { padding: 8px 16px 0 68px; color: var(--text-muted); font-size: 13px; font-weight: 600; }
 
         .bottom-tabs { position: fixed; bottom: 0; width: 100%; max-width: 600px; background: var(--bg-color); border-top: 1px solid var(--border-color); display: flex; justify-content: space-around; height: 60px; z-index: 800; }
-        .bottom-tabs .tab { flex: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted); transition: background 0.2s, color 0.2s; }
-        .bottom-tabs .tab:hover { background: var(--bg-secondary); }
+        .bottom-tabs .tab { flex: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted); transition: background 0.2s, color 0.2s; -webkit-tap-highlight-color: transparent; }
+        @media (hover: hover) {
+    .bottom-tabs .tab:hover { background: var(--bg-secondary); }
+}
         .bottom-tabs .tab.active { color: var(--text-main); border-bottom: 3px solid var(--primary-blue); }
         body.in-thread-view .bottom-tabs { display: none; }
 
-        .search-page { display: none; position: relative; padding: 12px 16px 4px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); position: sticky; top: 0; z-index: 700; }
+        .search-page { display: none; position: relative; padding: 12px 16px 4px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); position: relative; z-index: 700; }
         .search-box { width: 100%; height: 46px; box-sizing: border-box; border: 1px solid #cfd9de; border-radius: 9999px; outline: none; padding: 0 16px 0 44px; font-family: inherit; font-size: 16px; color: var(--text-main); background: var(--bg-secondary); }
         .search-box:focus { border-color: var(--primary-blue); background: var(--bg-color); box-shadow: 0 0 0 1px var(--primary-blue); }
         .search-box-wrap { position: relative; }
@@ -89,9 +91,9 @@
         .write-post-btn-fixed:hover { background-color: var(--primary-hover); }
         body.in-thread-view .write-post-btn-fixed { bottom: 20px; }
 
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); justify-content: center; align-items: center; z-index: 1000; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000000; justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: var(--bg-color); width: 100%; max-width: 600px; border-radius: 16px; position: relative; box-sizing: border-box; max-height: 90vh; overflow-y: auto; display: flex; flex-direction: column; }
-        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 0 16px; height: 53px; border-bottom: 1px solid var(--border-color); position: sticky; top: 0; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); z-index: 10; }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 0 16px; height: 53px; border-bottom: 1px solid var(--border-color); position: relative; background: #ffffff;  z-index: 10; }
         .modal-header h2 { font-size: 20px; font-weight: 700; margin: 0; }
         .close-btn { cursor: pointer; font-size: 20px; color: var(--text-main); font-weight: bold; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background 0.2s;}
         .close-btn:hover { background: var(--bg-secondary); }
@@ -152,7 +154,7 @@
         .post-dropdown-item.danger { color: #f4212e; }
 
         .media-preview-wrapper { position: relative; height: 100%; }
-        .remove-media-btn { position: absolute; top: 8px; right: 8px; background: rgba(15, 20, 25, 0.75); color: white; border: none; border-radius: 50%; width: 32px; height: 32px; font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; backdrop-filter: blur(4px); z-index: 5; }
+        .remove-media-btn { position: absolute; top: 8px; right: 8px; background: rgba(15, 20, 25, 0.75); color: white; border: none; border-radius: 50%; width: 32px; height: 32px; font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s;  z-index: 5; }
         .remove-media-btn:hover { background: rgba(15, 20, 25, 0.9); }
 
         .media-item-wrap { position: relative; width: 100%; height: 100%; display: block; overflow: hidden; }
@@ -168,14 +170,14 @@
         .media-item { width: 100%; height: 100%; object-fit: cover; cursor: pointer; -webkit-touch-callout: default; }
         .grid-1 .media-item-wrap { max-height: 500px; height: auto; display: block; }
         
-        #imageViewerModal { background: rgba(0,0,0,0.85); backdrop-filter: blur(4px); }
+        #imageViewerModal { background: #000000;  }
         #imageViewerContent { background: transparent; box-shadow: none; display: flex; align-items: center; justify-content: center; height: 100%; width: 100%; overflow: hidden; position: relative; }
         .viewer-full-image { max-width: 100%; max-height: 90vh; object-fit: contain; cursor: zoom-out; border-radius: 8px; -webkit-touch-callout: default; transition: opacity 0.05s ease; }
         .viewer-close-btn { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; }
         .viewer-close-btn:hover { background: rgba(0,0,0,0.8); }
         #postMediaPreview { display: none; margin-top: 12px; }
 
-        .home-toolbar { display: flex; justify-content: flex-end; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); position: sticky; top: 0; z-index: 700; }
+        .home-toolbar { display: flex; justify-content: flex-end; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); position: relative; z-index: 700; }
         .home-tools-wrapper { position: relative; }
         .home-tools-btn { width: 40px; height: 40px; padding: 0; border: none; border-radius: 50%; background: transparent; color: var(--text-main); font-size: 22px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .home-tools-btn:hover { background: var(--bg-secondary); }
@@ -187,7 +189,7 @@
         .storage-btn:hover { background: var(--bg-secondary); }
         .storage-btn.danger { color: #f4212e; }
 
-        .startup-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(255,255,255,0.96); display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }
+        .startup-overlay { position: fixed; inset: 0; z-index: 2000; background: #ffffff; display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }
         .startup-card { width: 100%; max-width: 420px; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.12); padding: 24px; box-sizing: border-box; text-align: center; }
         .startup-card h2 { margin: 0 0 10px; font-size: 24px; }
         .startup-card p { margin: 0 0 20px; color: var(--text-muted); font-size: 15px; line-height: 21px; }
@@ -251,11 +253,11 @@ u, .compose-textarea u, .post-content u {
     
     /* Ajustar las transparencias que originalmente eran blancas */
     .modal-header { 
-        background: rgba(0, 0, 0, 0.95); 
+        background: #000000; 
     }
     
     .startup-overlay { 
-        background: rgba(0, 0, 0, 0.96); 
+        background: #000000; 
     }
     
     /* Oscurecer los fondos por defecto grises de los avatares */
@@ -267,4 +269,11 @@ u, .compose-textarea u, .post-content u {
     .edit-profile-btn, .profile-dropdown-btn, .startup-secondary, .rt-btn, .search-box, .input-group {
         border-color: var(--border-color);
     }
+}
+
+/* Modificaciones dinámicas añadidas por script */
+.submit-btn:disabled { 
+    opacity: 0.6; 
+    cursor: not-allowed; 
+    pointer-events: none; 
 }
