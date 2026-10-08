@@ -7,7 +7,7 @@
     let profiles = [];
     let activeProfileId = null;
     let threadsData = [];
-    let currentTab = 'home';
+    let currentTab = 'profile';
     let currentProfileContentTab = 'posts';
 
     let selectedMediaFiles = [];
@@ -396,7 +396,11 @@ async function loadStateFromFolder() {
         console.error("Error cargando desde IndexedDB", e);
     }
     
-    threadsData.sort((a,b) => b.id.localeCompare(a.id));
+    threadsData.sort((a,b) => {
+        const maxA = a.posts && a.posts.length > 0 ? a.posts.reduce((m, p) => p.id > m ? p.id : m, a.id) : a.id;
+        const maxB = b.posts && b.posts.length > 0 ? b.posts.reduce((m, p) => p.id > m ? p.id : m, b.id) : b.id;
+        return maxB.localeCompare(maxA);
+    });
     if (profiles.length > 0 && !profiles.some(p => p.id === activeProfileId)) activeProfileId = profiles[0].id;
 }
 
@@ -410,7 +414,7 @@ async function finishFolderLoad() {
 
         renderCurrentProfileUI();
         renderAllFeed();
-        switchTab('home');
+        switchTab('profile');
         return true;
     }
 
@@ -633,7 +637,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
 
         isInitialProfileCreation = false;
         document.getElementById('newProfileModal').style.display = 'none';
-        renderCurrentProfileUI(); renderAllFeed(); switchTab('home'); 
+        renderCurrentProfileUI(); renderAllFeed(); switchTab('profile'); 
     }
 
     async function switchProfile(id) { activeProfileId = id; await saveSettingsToFolder(); document.getElementById('profileDropdown').style.display = 'none'; renderCurrentProfileUI(); if (currentTab === 'profile') renderProfileContent(); else updateFeedVisibility(); }
@@ -1044,7 +1048,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                     const parIdx = t.posts.findIndex(p => p.id === replyingToPost.dataset.id);
                     if (parIdx > -1) {
                         t.posts[parIdx].replyCount = (t.posts[parIdx].replyCount || 0) + 1;
-                        insertIdx = parIdx + 1;
+                        insertIdx = t.posts.length; // Inserta al final para mantener cronología
                         
                         // Actualizar contador visualmente en el momento
                         const pEl = replyingToThread.querySelector(`.post[data-id="${replyingToPost.dataset.id}"] .reply-count-text`);
@@ -1054,6 +1058,10 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                 t.posts.splice(insertIdx, 0, np);
                 threadToSave = t;
                 
+                // Mover el hilo al tope del feed tras la nueva interacción
+                threadsData.splice(tIdx, 1);
+                threadsData.unshift(t);
+                
                 // FIX: Actualización in-place del DOM. 
                 // Evitamos el unshift() (para que no salte el hilo) y renderAllFeed (para que no se congele).
                 const tc = document.querySelector(`.thread-container[data-thread-id="${t.id}"], .profile-response-context[data-thread-id="${t.id}"]`);
@@ -1062,11 +1070,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                     const newPostEl = createPostElement(np, null);
                     if (replyingToPost) {
                         const parentEl = tc.querySelector(`.post[data-id="${replyingToPost.dataset.id}"]`);
-                        if (parentEl && parentEl.nextSibling) {
-                            tc.insertBefore(newPostEl, parentEl.nextSibling);
-                        } else {
-                            tc.appendChild(newPostEl);
-                        }
+                        tc.appendChild(newPostEl);
                     } else {
                         tc.appendChild(newPostEl);
                     }

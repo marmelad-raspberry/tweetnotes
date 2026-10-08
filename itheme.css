@@ -28,7 +28,9 @@ body {
 
 /* Efecto Cristal (Blur) en Barras Superiores e Inferiores */
 .modal-header, .home-toolbar, .search-page, .bottom-tabs {
-    background: #ffffff !important;
+    background: rgba(255, 255, 255, 0.7) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    backdrop-filter: blur(20px) !important;
     
     
     border-color: var(--border-color) !important;
@@ -36,7 +38,9 @@ body {
 
 @media (prefers-color-scheme: dark) {
     .modal-header, .home-toolbar, .search-page, .bottom-tabs {
-        background: #1c1c1e !important;
+        background: rgba(28, 28, 30, 0.75) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        backdrop-filter: blur(20px) !important;
     }
 }
 
