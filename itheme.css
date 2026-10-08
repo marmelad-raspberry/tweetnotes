@@ -70,7 +70,8 @@ body {
     margin: 0 !important;
     max-width: 100% !important;
     height: auto;
-    max-height: 92vh !important;
+    max-height: 75vh !important;
+    overflow-y: auto !important; /* Habilita el scroll interno al abrir el teclado */
     padding-bottom: env(safe-area-inset-bottom, 30px);
     animation: slideUpSheet 0.4s var(--ios-easing) forwards;
 }
@@ -172,4 +173,38 @@ body {
 @keyframes fadeInModal {
     from { background: #000000; }
     to { background: #000000; }
+}
+
+/* === INYECCIÓN: FIX PARA MANTENER BOTONES DE POST VISIBLES === */
+:root {
+    --vv-height: 100vh;
+}
+
+.modal {
+    /* Usa la variable calculada por JS o cae en 100vh por defecto */
+    height: var(--vv-height) !important; 
+    align-items: flex-end !important;
+}
+
+.modal-content {
+    /* Limitamos el tamaño máximo respetando el teclado */
+    max-height: calc(var(--vv-height) * 0.95) !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.modal-body {
+    flex-grow: 1;
+    overflow-y: auto !important;
+    padding-bottom: 0 !important;
+}
+
+.media-actions {
+    /* Ancla los botones de imagen y publicación al borde inferior de la ventana visible */
+    position: sticky !important;
+    bottom: 0 !important;
+    background: var(--bg-color) !important;
+    z-index: 999 !important;
+    border-top: 1px solid var(--border-color) !important;
+    padding-bottom: env(safe-area-inset-bottom, 12px) !important;
 }

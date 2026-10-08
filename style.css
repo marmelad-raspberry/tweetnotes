@@ -133,7 +133,7 @@
         .thread-container .post:not(:last-child) .thread-line { display: none; }
         body.in-thread-view .thread-container.active-thread .post:not(:last-child) .thread-line { display: block; }
         
-        .post-main { flex-grow: 1; overflow: hidden; }
+        .post-main { flex-grow: 1; min-width: 0; }
         .post-header { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; position: relative;}
         .post-author { font-weight: 700; font-size: 15px; }
         .post-handle { color: var(--text-muted); font-size: 15px; }
@@ -271,3 +271,6 @@ u, .compose-textarea u, .post-content u {
     cursor: not-allowed; 
     pointer-events: none; 
 }
+
+/* Fix Bug 2: Ocultar otros hilos en la vista in-thread */
+body.in-thread-view .feed .thread-container:not(.active-thread) { display: none !important; }

@@ -576,6 +576,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                 renderVirtualBatch();
             }
             const aTh = document.querySelector(`.thread-container[data-thread-id="${window.activeThreadId}"]`); 
+            document.querySelectorAll('.thread-container').forEach(th => { if(th !== aTh) th.style.display = 'none'; });
             if(aTh) { aTh.classList.add('active-thread'); aTh.style.display = 'block'; } else closeThreadView(); 
         }
     }
@@ -1037,33 +1038,58 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
             const tIdx = threadsData.findIndex(th => th.id === replyingToThread.dataset.threadId);
             if (tIdx > -1) {
                 const t = threadsData[tIdx];
-                t.posts.push(np);
-                if (replyingToPost) { const par = t.posts.find(p => p.id === replyingToPost.dataset.id); if (par) par.replyCount++; }
+                // FIX: Insertar respuesta después del post exacto al que se responde
+                let insertIdx = t.posts.length;
+                if (replyingToPost) {
+                    const parIdx = t.posts.findIndex(p => p.id === replyingToPost.dataset.id);
+                    if (parIdx > -1) {
+                        t.posts[parIdx].replyCount = (t.posts[parIdx].replyCount || 0) + 1;
+                        insertIdx = parIdx + 1;
+                        
+                        // Actualizar contador visualmente en el momento
+                        const pEl = replyingToThread.querySelector(`.post[data-id="${replyingToPost.dataset.id}"] .reply-count-text`);
+                        if (pEl) pEl.textContent = t.posts[parIdx].replyCount;
+                    }
+                }
+                t.posts.splice(insertIdx, 0, np);
                 threadToSave = t;
                 
-                // Mover el hilo al inicio del feed. Esto elimina el cuello de botella
-                // del 'while (virtualFeedQueue.length > 0)' que congelaba la pestaña.
-                threadsData.splice(tIdx, 1);
-                threadsData.unshift(t);
+                // FIX: Actualización in-place del DOM. 
+                // Evitamos el unshift() (para que no salte el hilo) y renderAllFeed (para que no se congele).
+                const tc = document.querySelector(`.thread-container[data-thread-id="${t.id}"], .profile-response-context[data-thread-id="${t.id}"]`);
+                if (tc) {
+                    if (tc.virtualNodeStorage) { tc.style.minHeight = ''; tc.appendChild(tc.virtualNodeStorage); tc.virtualNodeStorage = null; tc.dataset.virtualized = 'false'; }
+                    const newPostEl = createPostElement(np, null);
+                    if (replyingToPost) {
+                        const parentEl = tc.querySelector(`.post[data-id="${replyingToPost.dataset.id}"]`);
+                        if (parentEl && parentEl.nextSibling) {
+                            tc.insertBefore(newPostEl, parentEl.nextSibling);
+                        } else {
+                            tc.appendChild(newPostEl);
+                        }
+                    } else {
+                        tc.appendChild(newPostEl);
+                    }
+                }
+                window._justRepliedToThreadId = t.id;
             }
             } else { threadToSave = { id: 'thread_' + Date.now(), posts: [np] }; threadsData.unshift(threadToSave); }
         }
 
-        if (currentTab === 'search' && !document.body.classList.contains('in-thread-view')) renderSearchResults(document.getElementById('searchInput').value);
-        else if (currentTab === 'profile' && !document.body.classList.contains('in-thread-view')) renderProfileContent(); 
-        else renderAllFeed();
-        
-        if (replyingToThread && !document.body.classList.contains('in-thread-view')) {
-             const tId = replyingToThread.dataset.threadId; setTimeout(() => { 
-                while (virtualFeedQueue.length > 0 && !document.querySelector(`.thread-container[data-thread-id="${tId}"]`)) {
-                    renderVirtualBatch();
+        // FIX: Desviar el re-renderizado global si acabamos de responder (mejora el rendimiento drásticamente)
+        if (window._justRepliedToThreadId) {
+            if (!document.body.classList.contains('in-thread-view')) {
+                const uc = document.querySelector(`.thread-container[data-thread-id="${window._justRepliedToThreadId}"]`);
+                if (uc) {
+                    const fp = uc.querySelector('.post');
+                    if (fp) viewThread(fp, {target: fp});
                 }
-                const uc = document.querySelector(`.thread-container[data-thread-id="${tId}"]`); 
-                if(uc) { 
-                    if (uc.virtualNodeStorage) { uc.style.minHeight = ''; uc.appendChild(uc.virtualNodeStorage); uc.virtualNodeStorage = null; uc.dataset.virtualized = 'false'; }
-                    const fp = uc.querySelector('.post'); if(fp) viewThread(fp, {target: fp}); 
-                } 
-            }, 0);
+            }
+            window._justRepliedToThreadId = null;
+        } else {
+            if (currentTab === 'search' && !document.body.classList.contains('in-thread-view')) renderSearchResults(document.getElementById('searchInput').value);
+            else if (currentTab === 'profile' && !document.body.classList.contains('in-thread-view')) renderProfileContent(); 
+            else renderAllFeed();
         }
 
         if (threadToSave) await saveThreadToFolder(threadToSave);
@@ -1317,4 +1343,148 @@ if (navigator.storage && navigator.storage.persist) {
     }).catch(function(error) {
         console.error("Error al solicitar persistencia de almacenamiento:", error);
     });
+}
+
+
+// === INYECCIÓN: FIX TECLADO MÓVIL (VENTANA DE POST) ===
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', function() {
+        const postModal = document.getElementById('postModal');
+        
+        // Si la ventana de crear/editar post está abierta
+        if (postModal && postModal.style.display === 'flex') {
+            const modalContent = postModal.querySelector('.modal-content');
+            if (modalContent) {
+                // Ajustar la altura máxima restando un pequeño margen para asegurar visibilidad
+                modalContent.style.maxHeight = (window.visualViewport.height - 20) + 'px';
+                
+                // Asegurar que el área donde escribe el usuario se desplace a la vista
+                const activeEl = document.activeElement;
+                if (activeEl && (activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+                    setTimeout(() => {
+                        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }, 50);
+                }
+            }
+        } else {
+            // Limpiar los estilos dinámicos si el modal se cierra
+            document.querySelectorAll('.modal-content').forEach(m => {
+                m.style.maxHeight = ''; 
+            });
+        }
+    });
+}
+
+
+// === INYECCIÓN: FIX PARA TECLADO EN MÓVILES ===
+// Aseguramos que la ventana de crear/editar y el botón de postear sean visibles
+(function() {
+    // 1. Inyectar estilos para que el cuerpo sea scrolleable y el footer quede fijo
+    const style = document.createElement('style');
+    style.innerHTML = `
+        #postModal .modal-content {
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important; 
+        }
+        #postModal .modal-body {
+            flex: 1 1 auto !important;
+            overflow-y: auto !important;
+            padding-bottom: 20px !important;
+        }
+        #postModal .media-actions {
+            flex: 0 0 auto !important;
+            background: var(--bg-color);
+            position: sticky;
+            bottom: 0;
+            z-index: 10;
+            border-top: 1px solid var(--border-color);
+        }
+    `;
+    document.head.appendChild(style);
+
+    // 2. Usar visualViewport para ajustar la altura de los modales al espacio real (sin teclado)
+    if (window.visualViewport) {
+        const adjustForKeyboard = () => {
+            const vpHeight = window.visualViewport.height;
+            const modals = document.querySelectorAll('.modal-content');
+            
+            modals.forEach(content => {
+                // Ajustamos la altura máxima al área visible real (restando un pequeño margen)
+                content.style.maxHeight = (vpHeight - 15) + 'px';
+            });
+            
+            // Si el modal de post está abierto, asegurar que el input esté a la vista
+            const postModal = document.getElementById('postModal');
+            if (postModal && postModal.style.display === 'flex') {
+                const postText = document.getElementById('postText');
+                if (document.activeElement === postText || postText.contains(document.activeElement)) {
+                    // Desplazamos suavemente el cursor a la zona visible
+                    postText.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+        };
+
+        // Escuchamos los cambios de tamaño que dispara el teclado virtual
+        window.visualViewport.addEventListener('resize', adjustForKeyboard);
+        window.visualViewport.addEventListener('scroll', adjustForKeyboard);
+        
+        // Ejecución inicial para estabilizar la vista
+        adjustForKeyboard();
+    }
+})();
+
+
+// === INYECCIÓN: FIX PARA OBSTRUCCIÓN DEL TECLADO MÓVIL ===
+(function() {
+    function centrarElementoActivo() {
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+            setTimeout(() => {
+                activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 150); // Ligero retraso para esperar la animación del teclado
+        }
+    }
+
+    // Navegadores modernos con soporte visualViewport (iOS Safari, Chrome Android)
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', centrarElementoActivo);
+    } 
+    // Fallback para navegadores más antiguos
+    else {
+        document.addEventListener('focusin', centrarElementoActivo);
+        window.addEventListener('resize', centrarElementoActivo);
+    }
+})();
+
+// === INYECCIÓN: FIX PARA TECLADO MÓVIL (VISUAL VIEWPORT) ===
+if (window.visualViewport) {
+    const adjustViewport = () => {
+        // Establecemos la altura real del área visible
+        document.documentElement.style.setProperty('--vv-height', `${window.visualViewport.height}px`);
+        
+        // Forzamos el redibujado de los modales para que no queden ocultos
+        const modals = document.querySelectorAll('.modal');
+        modals.forEach(m => {
+            m.style.height = `${window.visualViewport.height}px`;
+            m.style.top = `${window.visualViewport.offsetTop}px`;
+        });
+
+        // Aseguramos que los botones queden a la vista si escribimos texto largo
+        const modalContent = document.querySelector('#postModal .modal-content');
+        if (modalContent) {
+            modalContent.scrollTop = modalContent.scrollHeight;
+        }
+    };
+    
+    // Escuchar redimensionamiento y desplazamiento del teclado virtual
+    window.visualViewport.addEventListener('resize', adjustViewport);
+    window.visualViewport.addEventListener('scroll', adjustViewport);
+    adjustViewport();
+    
+    // Auto-ajustar cuando se toca el área de texto
+    const postText = document.getElementById('postText');
+    if (postText) {
+        postText.addEventListener('focus', () => setTimeout(adjustViewport, 150));
+    }
 }
