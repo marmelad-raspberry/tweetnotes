@@ -927,7 +927,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         el.addEventListener('touchend', function() { this.play().catch(()=>{}); }, {passive: true});
         el.addEventListener('mousedown', function() { this.pause(); });
         el.addEventListener('mouseup', function() { this.play().catch(()=>{}); });
-                el.style.maxWidth = '100%'; el.style.maxHeight = '100vh'; el.style.borderRadius = '0px';
+                el.style.flex = '0 0 100%'; el.style.width = '100%'; el.style.maxHeight = '100vh'; el.style.objectFit = 'contain'; el.style.scrollSnapAlign = 'start'; el.style.borderRadius = '0px';
                 
                 // --- NUEVA LÓGICA: Silenciado por defecto y persistencia de sesión ---
                 el.muted = window.sessionVideoUnmuted ? false : true;
@@ -937,7 +937,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
             } else {
                     el = document.createElement('img');
                     el.className = 'viewer-full-image';
-                    el.style.maxWidth = '100%'; el.style.maxHeight = '90vh'; el.style.objectFit = 'contain'; el.style.borderRadius = '8px';
+                    el.style.flex = '0 0 100%'; el.style.width = '100%'; el.style.maxHeight = '90vh'; el.style.objectFit = 'contain'; el.style.scrollSnapAlign = 'start'; el.style.borderRadius = '8px';
                     if (fullUrl) el.src = fullUrl;
                     else setMediaElement(el, m.thumbnailUrl || m.thumbPath || m.path);
                 }
@@ -966,12 +966,32 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         document.getElementById('imageViewerContent').innerHTML = '';
     }
 
-    const vc = document.getElementById('imageViewerContent'); 
-    vc.addEventListener('touchstart', e => { touchstartX = e.changedTouches[0].screenX; }, {passive: true}); 
-    vc.addEventListener('touchend', e => { 
-        touchendX = e.changedTouches[0].screenX; const st = 15; 
-        if (touchendX < touchstartX - st && currentViewerIndex < viewerImages.length - 1) { currentViewerIndex++; updateViewerMedia(); } 
-        if (touchendX > touchstartX + st && currentViewerIndex > 0) { currentViewerIndex--; updateViewerMedia(); } 
+    const vc = document.getElementById('imageViewerContent');
+    // Aplicar estilos para desplazamiento nativo fluido (CSS Scroll Snap)
+    vc.style.display = 'flex';
+    vc.style.overflowX = 'auto';
+    vc.style.overflowY = 'hidden';
+    vc.style.scrollSnapType = 'x mandatory';
+    vc.style.scrollBehavior = 'smooth';
+    vc.style.WebkitOverflowScrolling = 'touch';
+    
+    let scrollTimeout;
+    vc.addEventListener('scroll', () => {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+            if (vc.clientWidth === 0) return;
+            const newIndex = Math.round(vc.scrollLeft / vc.clientWidth);
+            if (newIndex !== currentViewerIndex && newIndex >= 0 && newIndex < viewerImages.length) {
+                currentViewerIndex = newIndex;
+                // Reproducir/Pausar videos basados en el nuevo índice visible
+                Array.from(vc.children).forEach((child, idx) => {
+                    if (child.tagName === 'VIDEO') {
+                        if (idx === currentViewerIndex) child.play().catch(()=>{});
+                        else child.pause();
+                    }
+                });
+            }
+        }, 100);
     }, {passive: true});
 
     async function saveProfile() {
