@@ -92,7 +92,7 @@
         body.in-thread-view .write-post-btn-fixed { bottom: 20px; }
 
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000000; justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: var(--bg-color); width: 100%; max-width: 600px; border-radius: 16px; position: relative; box-sizing: border-box; max-height: 90vh; overflow-y: auto; display: flex; flex-direction: column; }
+        .modal-content { background: var(--bg-color); width: 100%; max-width: 600px; border-radius: 16px; position: relative; box-sizing: border-box; max-height: 100vh; overflow-y: auto; display: flex; flex-direction: column; }
         .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 0 16px; height: 53px; border-bottom: 1px solid var(--border-color); position: relative; background: #ffffff;  z-index: 10; }
         .modal-header h2 { font-size: 20px; font-weight: 700; margin: 0; }
         .close-btn { cursor: pointer; font-size: 20px; color: var(--text-main); font-weight: bold; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background 0.2s;}
@@ -148,7 +148,7 @@
 
         .post-options-btn { background: transparent; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 50%; transition: background 0.2s; }
         .post-options-btn:hover { background: rgba(15, 20, 25, 0.1); color: var(--primary-blue); }
-        .post-dropdown { display: none; position: absolute; right: 0; top: 30px; background: var(--bg-color); border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.15); border: 1px solid var(--border-color); z-index: 100; min-width: 150px; overflow: hidden; }
+        .post-dropdown { display: none; position: absolute; right: 0; top: 30px; background: var(--bg-color); border-radius: 0px; box-shadow: 0 2px 10px rgba(0,0,0,0.15); border: 1px solid var(--border-color); z-index: 100; min-width: 150px; overflow: hidden; }
         .post-dropdown-item { padding: 12px 16px; cursor: pointer; font-weight: 600; font-size: 15px; transition: background 0.2s; }
         .post-dropdown-item:hover { background: var(--bg-secondary); }
         .post-dropdown-item.danger { color: #f4212e; }
@@ -172,7 +172,7 @@
         
         #imageViewerModal { background: #000000;  }
         #imageViewerContent { background: transparent; box-shadow: none; display: flex; align-items: center; justify-content: center; height: 100%; width: 100%; overflow: hidden; position: relative; }
-        .viewer-full-image { max-width: 100%; max-height: 90vh; object-fit: contain; cursor: zoom-out; border-radius: 8px; -webkit-touch-callout: default; transition: opacity 0.05s ease; }
+        .viewer-full-image { max-width: 100%; max-height: 100vh; object-fit: contain; cursor: zoom-out; border-radius: 0px; -webkit-touch-callout: default; transition: opacity 0.05s ease; }
         .viewer-close-btn { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; }
         .viewer-close-btn:hover { background: rgba(0,0,0,0.8); }
         #postMediaPreview { display: none; margin-top: 12px; }
@@ -214,7 +214,7 @@
 }
 
 
-.rt-toolbar { display: flex; gap: 4px; margin-bottom: 8px; padding: 6px; background: var(--bg-secondary); border-radius: 8px; align-items: center; }
+.rt-toolbar { display: flex; gap: 4px; margin-bottom: 8px; padding: 6px; background: var(--bg-secondary); border-radius: 0px; align-items: center; }
 .rt-btn { background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-main); font-size: 18px; font-family: serif; cursor: pointer; border-radius: 6px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
 .rt-btn:hover { background: var(--bg-secondary); border-color: var(--primary-blue); color: var(--primary-blue); }
 .rt-divider { width: 1px; height: 28px; background: #cfd9de; margin: 0 4px; }
@@ -274,3 +274,76 @@ u, .compose-textarea u, .post-content u {
 
 /* Fix Bug 2: Ocultar otros hilos en la vista in-thread */
 body.in-thread-view .feed .thread-container:not(.active-thread) { display: none !important; }
+
+
+/* --- Galería Multimedia del Perfil --- */
+.profile-media-gallery {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    padding: 2px;
+}
+.profile-gallery-item-wrap {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    position: relative;
+    overflow: hidden;
+    background-color: var(--bg-secondary);
+}
+.profile-gallery-item {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    display: block;
+    background-color: var(--bg-secondary);
+}
+.video-overlay.mini {
+    width: 28px;
+    height: 28px;
+}
+.video-overlay.mini svg {
+    width: 14px;
+    height: 14px;
+    margin-left: 2px;
+}
+
+/* --- Visualizador Vertical (Scroll) --- */
+.vertical-viewer-scroll { width: 100%; height: 100%; overflow-y: auto; overflow-x: hidden; scroll-snap-type: y mandatory; display: flex; flex-direction: column; background: #000; -webkit-overflow-scrolling: touch; }
+.vertical-viewer-item { width: 100%; height: 100%; flex: 0 0 100%; scroll-snap-align: start; display: flex; align-items: center; justify-content: center; position: relative; }
+.vertical-media-content { max-width: 100%; max-height: 100vh; object-fit: contain; }
+
+/* Ocultar barra de desplazamiento en visualizadores */
+.vertical-viewer-scroll {
+    -ms-overflow-style: none;  /* IE y Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+.vertical-viewer-scroll::-webkit-scrollbar {
+    display: none; /* Chrome, Safari y Opera */
+}
+#imageViewerContent::-webkit-scrollbar {
+    display: none;
+}
+
+/* --- Inyección: Visor Horizontal Suave --- */
+#imageViewerContent {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-start !important;
+}
+
+#imageViewerContent > * {
+    flex: 0 0 100%;
+    width: 100vw;
+    height: 100vh;
+    scroll-snap-align: start;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    object-fit: contain;
+}

@@ -54,7 +54,8 @@
             </div>
             <div class="profile-content-tabs" id="profileContentTabs">
                 <button class="profile-content-tab active" id="profileTabPosts" onclick="switchProfileContentTab('posts')">Principal</button>
-                <button class="profile-content-tab" id="profileTabReplies" onclick="switchProfileContentTab('replies')">Respuestas</button>
+                <button class="profile-content-tab" id="profileTabMedia" onclick="switchProfileContentTab('media')">Multimedia</button>
+                
             </div>
         </div>
 
@@ -74,9 +75,7 @@
         <div class="feed" id="feed"></div>
 
         <div class="bottom-tabs">
-            <div class="tab active" id="tabHome" onclick="switchTab('home')" title="Home">
-                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M12 1.696L.622 8.807l1.06 1.696L3 9.679V19.5C3 20.881 4.119 22 5.5 22h13c1.381 0 2.5-1.119 2.5-2.5V9.679l1.318.824 1.06-1.696L12 1.696zM12 16.5c-1.933 0-3.5-1.567-3.5-3.5s1.567-3.5 3.5-3.5 3.5 1.567 3.5 3.5-1.567 3.5-3.5 3.5z"/></svg>
-            </div>
+            
             <div class="tab" id="tabSearch" onclick="switchTab('search')" title="Buscar">
                 <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M10.5 4a6.5 6.5 0 1 0 4.056 11.582l4.431 4.432 1.414-1.414-4.432-4.431A6.5 6.5 0 0 0 10.5 4zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9z"/></svg>
             </div>
@@ -167,7 +166,7 @@
             <div class="modal-body post-compose" style="padding-top: 0;">
                 <div class="compose-avatar" id="modalComposeAvatar"></div>
                 <div class="compose-input-area">
-                    <div class="compose-profile-row">
+                    <div class="compose-profile-row" style="display: none;">
                         <span class="compose-profile-label">Publicar como</span>
                         <select id="postProfileSelect" class="compose-profile-select" aria-label="Perfil con el que publicar"></select>
                     </div>
@@ -204,6 +203,12 @@
         <div class="modal-content" id="imageViewerContent"></div>
     </div>
 
+    
+    <div class="modal" id="verticalViewerModal" onclick="if(event.target === this) closeVerticalViewer()" style="z-index: 1100;">
+        <button class="viewer-close-btn" onclick="closeVerticalViewer()">&times;</button>
+        <div id="verticalViewerScroll" class="vertical-viewer-scroll"></div>
+    </div>
+    
     <script src="app.js" defer></script>
 
     <!-- Registro del Service Worker para funcionamiento offline -->

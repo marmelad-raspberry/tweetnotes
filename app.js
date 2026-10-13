@@ -307,6 +307,7 @@ async function saveThreadToFolder(thread) {
                     savePost.media[j].thumbPath = thumbFilename;
                 }
 
+
                 delete m.file;
                 delete m.thumbBlob;
             }
@@ -472,7 +473,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
     function switchTab(tab, searchQuery = null) {
         const previousTab = currentTab; currentTab = tab;
         if (tab === 'profile' && previousTab !== 'profile') currentProfileContentTab = 'posts';
-        document.getElementById('tabHome').classList.toggle('active', tab === 'home');
+        (document.getElementById('tabHome') || {classList: {toggle: function(){}, add: function(){}, remove: function(){}}}).classList.toggle('active', tab === 'home');
         document.getElementById('tabSearch').classList.toggle('active', tab === 'search');
         document.getElementById('tabProfile').classList.toggle('active', tab === 'profile');
         
@@ -631,7 +632,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         if (avFile) { np.avatarFile = avFile; np.avatar = URL.createObjectURL(avFile); np.avatarThumb = URL.createObjectURL(await generateThumbnail(avFile, 256)); np.avatarFeedThumb = URL.createObjectURL(await generateThumbnail(avFile, 128)); }
         if (covFile) { np.coverFile = covFile; np.cover = URL.createObjectURL(covFile); np.coverThumb = URL.createObjectURL(await generateThumbnail(covFile, 600)); }
 
-        profiles.push(np); activeProfileId = np.id;
+        profiles.push(np); activeProfileId = np.id; composerProfileId = np.id; setComposerProfile(np.id); renderComposerProfileOptions(np.id);
         await saveProfileToFolder(np);
         await saveSettingsToFolder();
 
@@ -640,12 +641,12 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         renderCurrentProfileUI(); renderAllFeed(); switchTab('profile'); 
     }
 
-    async function switchProfile(id) { activeProfileId = id; await saveSettingsToFolder(); document.getElementById('profileDropdown').style.display = 'none'; renderCurrentProfileUI(); if (currentTab === 'profile') renderProfileContent(); else updateFeedVisibility(); }
+    async function switchProfile(id) { activeProfileId = id; composerProfileId = id; setComposerProfile(id); renderComposerProfileOptions(id); await saveSettingsToFolder(); document.getElementById('profileDropdown').style.display = 'none'; renderCurrentProfileUI(); if (currentTab === 'profile') renderProfileContent(); else updateFeedVisibility(); }
 
     async function openProfile(pid, e = null) {
         if (e) { e.preventDefault(); e.stopPropagation(); }
         const p = profiles.find(x => x.id === pid); if (!p) return;
-        activeProfileId = p.id; composerProfileId = p.id; await saveSettingsToFolder();  document.getElementById('profileDropdown').style.display = 'none'; renderCurrentProfileUI(); switchTab('profile'); window.scrollTo(0, 0);
+        activeProfileId = p.id; composerProfileId = p.id; setComposerProfile(p.id); renderComposerProfileOptions(p.id); await saveSettingsToFolder();  document.getElementById('profileDropdown').style.display = 'none'; renderCurrentProfileUI(); switchTab('profile'); window.scrollTo(0, 0);
     }
 
     function renderCurrentProfileUI() {
@@ -674,7 +675,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         if (onClick) div.onclick = onClick; renderPostContent(div, p.text, p.media); return div;
     }
 
-    function switchProfileContentTab(t) { currentProfileContentTab = t; document.getElementById('profileTabPosts').classList.toggle('active', t === 'posts'); document.getElementById('profileTabReplies').classList.toggle('active', t === 'replies'); if (currentTab === 'profile' && !document.body.classList.contains('in-thread-view')) { renderProfileContent(); window.scrollTo(0, 0); } }
+    function switchProfileContentTab(t) { currentProfileContentTab = t; document.getElementById('profileTabPosts').classList.toggle('active', t === 'posts'); const tabMedia = document.getElementById('profileTabMedia'); if(tabMedia) tabMedia.classList.toggle('active', t === 'media'); if (currentTab === 'profile' && !document.body.classList.contains('in-thread-view')) { renderProfileContent(); window.scrollTo(0, 0); } }
 
     function renderProfileContent() {
         if (currentTab !== 'profile' || document.body.classList.contains('in-thread-view')) return;
@@ -682,7 +683,61 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         
         let queue = [];
         
-        if (currentProfileContentTab === 'posts') {
+        if (currentProfileContentTab === 'media') {
+            queue.push(() => {
+            const mediaContainer = document.createElement('div');
+            mediaContainer.className = 'profile-media-gallery';
+            let hasMedia = false;
+            let profileMediaArr = [];
+            
+            threadsData.forEach(t => {
+                (t.posts || []).forEach(p => {
+                    if (p.authorId === activeProfileId && p.media && p.media.length > 0) {
+                        p.media.forEach(m => {
+                            hasMedia = true;
+                            const mIndex = profileMediaArr.length;
+                            profileMediaArr.push(m);
+                            
+                            const img = document.createElement('img');
+                            img.style.cursor = 'pointer';
+                            img.onclick = () => openVerticalViewer(profileMediaArr, mIndex);
+                            img.className = 'profile-gallery-item';
+                            // Reutiliza la miniatura del post convencional
+                            setMediaElement(img, m.thumbPath || m.path);
+                            
+                            if (m.isVideo) {
+                                const wrap = document.createElement('div');
+                                wrap.className = 'profile-gallery-item-wrap';
+                                wrap.appendChild(img);
+                                const vo = document.createElement('div'); 
+                                vo.className = 'video-overlay mini';
+                                vo.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+                                wrap.appendChild(vo);
+                                wrap.style.cursor = 'pointer';
+                                wrap.onclick = () => openVerticalViewer(profileMediaArr, mIndex);
+                                mediaContainer.appendChild(wrap);
+                            } else {
+                                mediaContainer.appendChild(img);
+                            }
+                        });
+                    }
+                });
+            });
+            
+            if (!hasMedia) {
+                const e = document.createElement('div'); 
+                e.className = 'search-empty-state'; 
+                e.textContent = 'No hay contenido multimedia.'; 
+                return e;
+            }
+            
+            const wrap = document.createElement('div');
+            
+            
+            wrap.appendChild(mediaContainer);
+            return wrap;
+        });
+        } else if (currentProfileContentTab === 'posts') {
             queue = getProfileMainThreads(activeProfileId).map(t => () => {
                 const tc = document.createElement('div'); tc.className = 'thread-container'; tc.dataset.threadId = t.id;
                 (t.posts || []).forEach((p, i) => tc.appendChild(createPostElement(p, i === 0 ? function(e){viewThread(this, e);} : null))); 
@@ -711,7 +766,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         }
         
         if (!threadsData.find(t => t.id === tid)) return;
-        currentTab = 'home'; document.getElementById('tabHome').classList.add('active'); document.getElementById('tabSearch').classList.remove('active'); document.getElementById('tabProfile').classList.remove('active');  document.getElementById('searchPage').style.display = 'none'; document.getElementById('coverPhoto').style.display = 'none'; document.querySelector('.profile-header').style.display = 'none'; 
+        currentTab = 'home'; (document.getElementById('tabHome') || {classList: {toggle: function(){}, add: function(){}, remove: function(){}}}).classList.add('active'); document.getElementById('tabSearch').classList.remove('active'); document.getElementById('tabProfile').classList.remove('active');  document.getElementById('searchPage').style.display = 'none'; document.getElementById('coverPhoto').style.display = 'none'; document.querySelector('.profile-header').style.display = 'none'; 
         renderAllFeed();
         
         while (virtualFeedQueue.length > 0 && !document.querySelector(`.thread-container[data-thread-id="${tid}"]`)) {
@@ -771,6 +826,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                     for (let m of (p.media || [])) {
                         if (m.path) await deleteMediaFile(m.path);
                         if (m.thumbPath) await deleteMediaFile(m.thumbPath);
+                        
                         if (m.thumbnailUrl) URL.revokeObjectURL(m.thumbnailUrl);
                     }
                 }
@@ -804,6 +860,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         for (const f of files) {
             const isVid = f.type.startsWith('video/'); if (isVid) { if (!vidAcc) { sk++; continue; } vidAcc = false; }
             const thumbBlob = await generateThumbnail(f);
+            
             const thumbUrl = URL.createObjectURL(thumbBlob);
             selectedMediaFiles.push({ file: f, isVideo: isVid, thumbBlob: thumbBlob, thumbnailUrl: thumbUrl });
         }
@@ -859,10 +916,25 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                 
                 let el;
                 if (m.isVideo) {
-                    el = document.createElement('video');
-                    el.src = fullUrl; el.controls = true;
-                    el.style.maxWidth = '100%'; el.style.maxHeight = '90vh'; el.style.borderRadius = '8px';
-                } else {
+                el = document.createElement('video');
+                el.src = fullUrl; el.controls = false; el.addEventListener('contextmenu', e => e.preventDefault()); el.addEventListener('click', function(e) { 
+            e.stopPropagation(); 
+            const newMutedState = !this.muted;
+            window.sessionVideoUnmuted = !newMutedState;
+            document.querySelectorAll('video').forEach(v => v.muted = newMutedState);
+        });
+        el.addEventListener('touchstart', function() { this.pause(); }, {passive: true});
+        el.addEventListener('touchend', function() { this.play().catch(()=>{}); }, {passive: true});
+        el.addEventListener('mousedown', function() { this.pause(); });
+        el.addEventListener('mouseup', function() { this.play().catch(()=>{}); });
+                el.style.maxWidth = '100%'; el.style.maxHeight = '100vh'; el.style.borderRadius = '0px';
+                
+                // --- NUEVA LÓGICA: Silenciado por defecto y persistencia de sesión ---
+                el.muted = window.sessionVideoUnmuted ? false : true;
+                el.addEventListener('volumechange', function() {
+                    window.sessionVideoUnmuted = !this.muted && this.volume > 0;
+                });
+            } else {
                     el = document.createElement('img');
                     el.className = 'viewer-full-image';
                     el.style.maxWidth = '100%'; el.style.maxHeight = '90vh'; el.style.objectFit = 'contain'; el.style.borderRadius = '8px';
@@ -875,7 +947,10 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         }
 
         Array.from(content.children).forEach((child, idx) => {
-            child.style.display = (idx === currentViewerIndex) ? 'block' : 'none';
+            child.style.display = 'flex'; // Cambiado para el contenedor horizontal
+            if (idx === currentViewerIndex) {
+                child.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+            }
             if (child.tagName === 'VIDEO') {
                 if (idx === currentViewerIndex) child.play().catch(()=>{});
                 else child.pause();
@@ -906,7 +981,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         if (nn) p.name = nn; if (nh) p.handle = formatUniqueHandle(nh, p.id); p.bio = nb;
         if (pi.files[0]) { if(p.avatarPath) await deleteMediaFile(p.avatarPath); if(p.avatarThumbPath) await deleteMediaFile(p.avatarThumbPath); if(p.avatarFeedThumbPath) await deleteMediaFile(p.avatarFeedThumbPath); p.avatarFile = pi.files[0]; p.avatar = URL.createObjectURL(pi.files[0]); p.avatarThumb = URL.createObjectURL(await generateThumbnail(pi.files[0], 256)); p.avatarFeedThumb = URL.createObjectURL(await generateThumbnail(pi.files[0], 128)); }
         if (ci.files[0]) { if(p.coverPath) await deleteMediaFile(p.coverPath); if(p.coverThumbPath) await deleteMediaFile(p.coverThumbPath); p.coverFile = ci.files[0]; p.cover = URL.createObjectURL(ci.files[0]); p.coverThumb = URL.createObjectURL(await generateThumbnail(ci.files[0], 600)); }
-        await saveProfileToFolder(p); renderCurrentProfileUI(); if (currentTab === 'profile') renderProfileContent(); else renderAllFeed();
+        await saveProfileToFolder(p); setComposerProfile(composerProfileId); renderComposerProfileOptions(composerProfileId); renderCurrentProfileUI(); if (currentTab === 'profile') renderProfileContent(); else renderAllFeed();
         pi.value = ''; ci.value = ''; closeEditModal();
     }
 
@@ -927,6 +1002,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                         for (let m of (post.media || [])) {
                             if (m.path) await deleteMediaFile(m.path);
                             if (m.thumbPath) await deleteMediaFile(m.thumbPath);
+                        
                             if (m.thumbnailUrl) URL.revokeObjectURL(m.thumbnailUrl);
                         }
                     }
@@ -938,6 +1014,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                     for (let m of (dPost.media || [])) {
                         if (m.path) await deleteMediaFile(m.path);
                         if (m.thumbPath) await deleteMediaFile(m.thumbPath);
+                        
                         if (m.thumbnailUrl) URL.revokeObjectURL(m.thumbnailUrl);
                     }
                     t.posts.splice(pIdx, 1); 
@@ -972,7 +1049,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         mArr.forEach(m => {
             const w = document.createElement('div'); w.className = 'media-item-wrap';
             const el = document.createElement('img'); 
-            const cIdx = idx++; el.onclick = e => { e.stopPropagation(); openFullViewer(iUrls, cIdx); };
+            const cIdx = idx++; el.onclick = (e) => { e.stopPropagation(); openFullViewer(mArr, cIdx); };
             el.className = 'media-item'; 
             setMediaElement(el, m.thumbnailUrl || m.thumbPath || m.path);
             w.appendChild(el);
@@ -1016,7 +1093,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         postBtn.disabled = true;
     }
     try {
-        const ptEl = document.getElementById('postText'); const text = window.isAdvancedMode ? ptEl.innerHTML.trim() : ptEl.innerText.trim(); const selId = profiles.some(p => p.id === composerProfileId) ? composerProfileId : activeProfileId;
+        const ptEl = document.getElementById('postText'); const text = window.isAdvancedMode ? ptEl.innerHTML.trim() : ptEl.innerText.trim(); const selId = composerProfileId;
         if (!selId || (!text && selectedMediaFiles.length === 0)) return;
 
         let threadToSave = null;
@@ -1031,6 +1108,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                     for (let rm of toDelete) {
                         if (rm.path) deleteMediaFile(rm.path);
                         if (rm.thumbPath) deleteMediaFile(rm.thumbPath);
+                        
                         if (rm.thumbnailUrl) URL.revokeObjectURL(rm.thumbnailUrl);
                     }
                     p.text = text; p.authorId = selId; p.isAdvanced = window.isAdvancedMode; p.media = [...selectedMediaFiles]; threadToSave = t;
@@ -1492,3 +1570,191 @@ if (window.visualViewport) {
         postText.addEventListener('focus', () => setTimeout(adjustViewport, 150));
     }
 }
+
+
+// === INYECCIÓN: VISUALIZADOR MULTIMEDIA VERTICAL ===
+let verticalViewerImages = [];
+let verticalViewerUrls = new Map();
+
+async function openVerticalViewer(mediaArr, index) {
+    if(typeof _pushStateIfMissing === 'function') _pushStateIfMissing('verticalViewerModal');
+    verticalViewerImages = mediaArr;
+    const modal = document.getElementById('verticalViewerModal');
+    const scrollContainer = document.getElementById('verticalViewerScroll');
+    modal.style.display = 'flex';
+    scrollContainer.innerHTML = '';
+    
+    mediaArr.forEach((m, i) => {
+        const item = document.createElement('div');
+        item.className = 'vertical-viewer-item';
+        item.dataset.index = i;
+        scrollContainer.appendChild(item);
+    });
+    
+    const items = scrollContainer.children;
+    if (items[index]) items[index].scrollIntoView({ behavior: 'instant', block: 'start' });
+    
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                loadVerticalMedia(entry.target);
+                // Precarga inteligente: arriba y abajo
+                const idx = parseInt(entry.target.dataset.index);
+                if (items[idx + 1]) loadVerticalMedia(items[idx + 1], true);
+                if (items[idx - 1]) loadVerticalMedia(items[idx - 1], true);
+                
+                // Cargar más contenido simulando scroll infinito
+                if (idx >= items.length - 2) {
+                    const currentLen = items.length;
+                    for (let i = 0; i < verticalViewerImages.length; i++) {
+                        const item = document.createElement('div');
+                        item.className = 'vertical-viewer-item';
+                        item.dataset.index = currentLen + i;
+                        document.getElementById('verticalViewerScroll').appendChild(item);
+                        observer.observe(item);
+                    }
+                }
+            } else {
+                const v = entry.target.querySelector('video');
+                if (v) v.pause();
+            }
+        });
+    }, { root: scrollContainer, threshold: 0.5 });
+    
+    Array.from(items).forEach(item => observer.observe(item));
+}
+
+async function loadVerticalMedia(container, isPreload = false) {
+    if (container.dataset.loaded) {
+        if (!isPreload) {
+            const vid = container.querySelector('video');
+            if (vid) vid.play().catch(()=>{});
+        }
+        return;
+    }
+    container.dataset.loaded = 'true';
+    const idx = parseInt(container.dataset.index);
+    const realIdx = idx % verticalViewerImages.length;
+    const m = verticalViewerImages[realIdx];
+    
+    let fullUrl = '';
+    if (m.file) { fullUrl = URL.createObjectURL(m.file); }
+    else if (m.path) {
+        try {
+            const mediaDir = await folderHandle.getDirectoryHandle('media', {create: true});
+            fullUrl = await getMediaUrl(mediaDir, m.path);
+        } catch(e) {}
+    }
+    if (fullUrl) verticalViewerUrls.set(realIdx, fullUrl);
+    
+    if (m.isVideo) {
+        const el = document.createElement('video');
+        el.src = fullUrl; el.controls = false; el.addEventListener('contextmenu', e => e.preventDefault()); el.addEventListener('click', function(e) { 
+            e.stopPropagation(); 
+            const newMutedState = !this.muted;
+            window.sessionVideoUnmuted = !newMutedState;
+            document.querySelectorAll('video').forEach(v => v.muted = newMutedState);
+        });
+        el.addEventListener('touchstart', function() { this.pause(); }, {passive: true});
+        el.addEventListener('touchend', function() { this.play().catch(()=>{}); }, {passive: true});
+        el.addEventListener('mousedown', function() { this.pause(); });
+        el.addEventListener('mouseup', function() { this.play().catch(()=>{}); }); el.loop = true; el.playsInline = true;
+        el.className = 'vertical-media-content';
+        
+        // --- NUEVA LÓGICA: Silenciado por defecto y persistencia de sesión ---
+        el.muted = window.sessionVideoUnmuted ? false : true;
+        el.addEventListener('volumechange', function() {
+            window.sessionVideoUnmuted = !this.muted && this.volume > 0;
+        });
+        
+        container.appendChild(el);
+        if (!isPreload) el.play().catch(()=>{});
+    } else {
+        const el = document.createElement('img');
+        el.src = fullUrl || (m.thumbnailUrl || m.thumbPath || m.path);
+        el.className = 'vertical-media-content';
+        container.appendChild(el);
+    }
+}
+
+function closeVerticalViewer(fromHistory = false) {
+    const modal = document.getElementById('verticalViewerModal');
+    if(modal) modal.style.display = 'none';
+    const scrollContainer = document.getElementById('verticalViewerScroll');
+    if(scrollContainer) scrollContainer.innerHTML = '';
+    verticalViewerUrls.forEach(url => URL.revokeObjectURL(url));
+    verticalViewerUrls.clear();
+    if (fromHistory !== true && history.state && history.state.view === 'verticalViewerModal') history.back();
+}
+
+window.addEventListener('popstate', (e) => {
+    const view = e.state ? e.state.view : null;
+    if (document.getElementById('verticalViewerModal') && document.getElementById('verticalViewerModal').style.display === 'flex' && view !== 'verticalViewerModal') {
+        closeVerticalViewer(true);
+    }
+});
+
+
+// === INYECCIÓN: BOTÓN FLOTANTE DINÁMICO (RANDOMIZADOR EN MULTIMEDIA) ===
+(function() {
+    // Interceptar cambio de sub-pestaña de perfil
+    const _originalSwitchProfileContentTab = switchProfileContentTab;
+    switchProfileContentTab = function(t) {
+        _originalSwitchProfileContentTab(t);
+        updateFloatingBtnState();
+    };
+
+    // Interceptar cambio de pestaña principal
+    const _originalSwitchTabPatch = switchTab;
+    switchTab = function(tab, searchQuery = null) {
+        _originalSwitchTabPatch(tab, searchQuery);
+        updateFloatingBtnState();
+    };
+
+    // Interceptar el comportamiento del botón flotante
+    const _originalHandleFloatingBtn = handleFloatingBtn;
+    handleFloatingBtn = function(e) {
+        if (currentTab === 'profile' && currentProfileContentTab === 'media') {
+            // Lógica del Randomizador
+            let profileMediaArr = [];
+            threadsData.forEach(t => {
+                (t.posts || []).forEach(p => {
+                    if (p.authorId === activeProfileId && p.media && p.media.length > 0) {
+                        p.media.forEach(m => profileMediaArr.push(m));
+                    }
+                });
+            });
+            if (profileMediaArr.length === 0) return;
+            
+            let shuffled = [...profileMediaArr];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            openVerticalViewer(shuffled, 0);
+        } else {
+            _originalHandleFloatingBtn(e);
+        }
+    };
+
+    function updateFloatingBtnState() {
+        const btn = document.querySelector('.write-post-btn-fixed');
+        if (!btn) return;
+        
+        if (currentTab === 'profile' && currentProfileContentTab === 'media') {
+            // Icono de Shuffle (mezclar)
+            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="white" style="width: 28px;"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>';
+            btn.style.backgroundColor = 'var(--text-main)'; 
+            btn.style.transform = 'scale(1.05)';
+            btn.style.transition = 'all 0.3s ease';
+        } else {
+            // Icono original de postear
+            btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width: 24px; fill: white;"><g><path d="M23 3c-6.62-.1-10.38 2.421-13.05 6.03C7.29 12.61 6 17.331 6 22h2c0-1.007.07-2.012.19-3H12c4.1 0 7.48-3.082 7.94-7.054C22.79 10.147 23.17 6.359 23 3zm-7 8h-1.5v2H16c.63-.016 1.2-.08 1.72-.188C16.95 15.24 14.68 17 12 17H8.55c.57-2.512 1.57-4.851 3-6.78 2.16-2.912 5.29-4.911 9.45-5.187C20.95 8.079 19.9 11 16 11zM4 9V6H1V4h3V1h2v3h3v2H6v3H4z"></path></g></svg>';
+            btn.style.backgroundColor = 'var(--primary-blue)';
+            btn.style.transform = 'scale(1)';
+        }
+    }
+    
+    // Configurar estado inicial
+    setTimeout(updateFloatingBtnState, 300);
+})();
