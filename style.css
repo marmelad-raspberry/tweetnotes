@@ -347,3 +347,21 @@ body.in-thread-view .feed .thread-container:not(.active-thread) { display: none 
     justify-content: center;
     object-fit: contain;
 }
+
+
+/* --- Inyección: Soporte para Gestos de Zoom Fluido en Visores --- */
+#imageViewerContent img,
+#imageViewerContent video,
+.vertical-viewer-item img,
+.vertical-viewer-item video {
+    touch-action: pan-x pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+    transform-origin: center center;
+    will-change: transform;
+}
+
+.vertical-viewer-item {
+    overflow: hidden;
+}
