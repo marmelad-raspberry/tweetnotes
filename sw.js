@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tweetnote-cache-v5';
+const CACHE_NAME = 'tweetnote-cache-v6';
 const urlsToCache = [
   './',
   './index.html',

@@ -855,16 +855,36 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
     document.getElementById('postProfileSelect').addEventListener('change', function() { setComposerProfile(this.value); });
     document.getElementById('postText').addEventListener('input', resizePostTextarea);
 
+    const MAX_MEDIA_PER_POST = 4;
+
+    function updateMediaUploadBtnState() {
+        const mediaLbl = document.getElementById('mediaUploadLabel');
+        const mediaInp = document.getElementById('postMedia');
+        if (!mediaLbl || !mediaInp) return;
+        const isDisabled = Boolean(window.isAdvancedMode) || selectedMediaFiles.length >= MAX_MEDIA_PER_POST;
+        mediaLbl.style.opacity = isDisabled ? '0.4' : '1';
+        mediaLbl.style.pointerEvents = isDisabled ? 'none' : 'auto';
+        mediaInp.disabled = isDisabled;
+    }
+
     document.getElementById('postMedia').addEventListener('change', async function(e) {
-        const files = Array.from(e.target.files); const hasVid = selectedMediaFiles.some(m => m.isVideo); let vidAcc = !hasVid; let sk = 0;
+        const files = Array.from(e.target.files);
+        let skipped = 0;
         for (const f of files) {
-            const isVid = f.type.startsWith('video/'); if (isVid) { if (!vidAcc) { sk++; continue; } vidAcc = false; }
+            if (selectedMediaFiles.length >= MAX_MEDIA_PER_POST) {
+                skipped++;
+                continue;
+            }
+            const isVid = f.type.startsWith('video/');
             const thumbBlob = await generateThumbnail(f);
-            
             const thumbUrl = URL.createObjectURL(thumbBlob);
             selectedMediaFiles.push({ file: f, isVideo: isVid, thumbBlob: thumbBlob, thumbnailUrl: thumbUrl });
         }
-        this.value = ''; if (sk > 0) alert('Máximo 1 video por post.'); renderMediaPreview();
+        this.value = '';
+        if (skipped > 0) {
+            alert(`Máximo ${MAX_MEDIA_PER_POST} archivos multimedia (imágenes o videos) por post.`);
+        }
+        renderMediaPreview();
     });
 
     function renderMediaPreview() {
@@ -876,7 +896,9 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
             selectedMediaFiles.forEach((m, i) => {
                 const w = document.createElement('div'); w.className = 'media-preview-wrapper';
                 const wrap = document.createElement('div'); wrap.className = 'media-item-wrap';
-                const el = document.createElement('img'); el.src = m.thumbnailUrl; el.className = 'media-item';
+                const el = document.createElement('img'); el.className = 'media-item';
+                if (m.thumbnailUrl) el.src = m.thumbnailUrl;
+                else setMediaElement(el, m.thumbPath || m.path);
                 wrap.appendChild(el);
                 if(m.isVideo) {
                     const vo = document.createElement('div'); vo.className = 'video-overlay';
@@ -887,6 +909,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                 w.appendChild(wrap); w.appendChild(rb); c.appendChild(w);
             });
         } else c.style.display = 'none';
+        updateMediaUploadBtnState();
     }
 
     async function openFullViewer(mediaArr, index) { 
@@ -1236,13 +1259,10 @@ function toggleAdvancedMode() {
     if (window.isAdvancedMode) {
         pt.focus();
         syncCmdState();
-        if(mediaLbl) { mediaLbl.style.opacity = '0.4'; mediaLbl.style.pointerEvents = 'none'; }
-        if(mediaInp) mediaInp.disabled = true;
     } else {
         pt.innerText = pt.innerText;
-        if(mediaLbl) { mediaLbl.style.opacity = '1'; mediaLbl.style.pointerEvents = 'auto'; }
-        if(mediaInp) mediaInp.disabled = false;
     }
+    if (typeof updateMediaUploadBtnState === 'function') updateMediaUploadBtnState();
 }
 
 window.execCmd = function(cmd) {
