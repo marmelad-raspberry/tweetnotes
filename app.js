@@ -252,33 +252,78 @@
 }
 
 async function saveProfileToFolder(profile) {
-    if (!folderHandle) return;
+    if (!folderHandle) folderHandle = await navigator.storage.getDirectory();
     const mediaDir = await folderHandle.getDirectoryHandle('media', {create: true});
+
+    if (profile.avatarFile) {
+        const ext = (profile.avatarFile.name && profile.avatarFile.name.includes('.'))
+            ? profile.avatarFile.name.split('.').pop()
+            : 'png';
+        const filename = `${profile.id}_avatar.${ext}`;
+        await writeFile(mediaDir, filename, profile.avatarFile);
+        profile.avatarPath = filename;
+
+        const thumbBlobAv = await generateThumbnail(profile.avatarFile, 256);
+        const avThumbData = (thumbBlobAv && thumbBlobAv.size > 0) ? thumbBlobAv : profile.avatarFile;
+        const thumbFileAv = `${profile.id}_avatar_thumb.webp`;
+        await writeFile(mediaDir, thumbFileAv, avThumbData);
+        profile.avatarThumbPath = thumbFileAv;
+
+        const thumbBlobAvFeed = await generateThumbnail(profile.avatarFile, 128);
+        const avFeedThumbData = (thumbBlobAvFeed && thumbBlobAvFeed.size > 0) ? thumbBlobAvFeed : avThumbData;
+        const thumbFileAvFeed = `${profile.id}_avatar_feed_thumb.webp`;
+        await writeFile(mediaDir, thumbFileAvFeed, avFeedThumbData);
+        profile.avatarFeedThumbPath = thumbFileAvFeed;
+
+        mediaCache.set(filename, profile.avatar || URL.createObjectURL(profile.avatarFile));
+        mediaCache.set(thumbFileAv, profile.avatarThumb || URL.createObjectURL(avThumbData));
+        mediaCache.set(thumbFileAvFeed, profile.avatarFeedThumb || URL.createObjectURL(avFeedThumbData));
+
+        delete profile.avatarFile;
+    }
+
+    if (profile.coverFile) {
+        const ext = (profile.coverFile.name && profile.coverFile.name.includes('.'))
+            ? profile.coverFile.name.split('.').pop()
+            : 'png';
+        const filename = `${profile.id}_cover.${ext}`;
+        await writeFile(mediaDir, filename, profile.coverFile);
+        profile.coverPath = filename;
+
+        const thumbBlobCov = await generateThumbnail(profile.coverFile, 600);
+        const covThumbData = (thumbBlobCov && thumbBlobCov.size > 0) ? thumbBlobCov : profile.coverFile;
+        const thumbFileCov = `${profile.id}_cover_thumb.webp`;
+        await writeFile(mediaDir, thumbFileCov, covThumbData);
+        profile.coverThumbPath = thumbFileCov;
+
+        mediaCache.set(filename, profile.cover || URL.createObjectURL(profile.coverFile));
+        mediaCache.set(thumbFileCov, profile.coverThumb || URL.createObjectURL(covThumbData));
+
+        delete profile.coverFile;
+    }
+
+    delete profile.avatar;
+    delete profile.cover;
+    delete profile.avatarThumb;
+    delete profile.coverThumb;
+    delete profile.avatarFeedThumb;
+
     const p = {...profile};
-    
-    if (p.avatarFile) {
-        const ext = p.avatarFile.name.split('.').pop() || 'png';
-        const filename = `${p.id}_avatar.${ext}`;
-        await writeFile(mediaDir, filename, p.avatarFile);
-        p.avatarPath = filename; const thumbBlobAv = await generateThumbnail(p.avatarFile, 256); const thumbFileAv = `${p.id}_avatar_thumb.webp`; await writeFile(mediaDir, thumbFileAv, thumbBlobAv); p.avatarThumbPath = thumbFileAv; const thumbBlobAvFeed = await generateThumbnail(p.avatarFile, 128); const thumbFileAvFeed = `${p.id}_avatar_feed_thumb.webp`; await writeFile(mediaDir, thumbFileAvFeed, thumbBlobAvFeed); p.avatarFeedThumbPath = thumbFileAvFeed;
-        delete p.avatarFile;
-    }
-    if (p.coverFile) {
-        const ext = p.coverFile.name.split('.').pop() || 'png';
-        const filename = `${p.id}_cover.${ext}`;
-        await writeFile(mediaDir, filename, p.coverFile);
-        p.coverPath = filename; const thumbBlobCov = await generateThumbnail(p.coverFile, 600); const thumbFileCov = `${p.id}_cover_thumb.webp`; await writeFile(mediaDir, thumbFileCov, thumbBlobCov); p.coverThumbPath = thumbFileCov;
-        delete p.coverFile;
-    }
-    delete p.avatar; delete p.cover; delete p.avatarThumb; delete p.coverThumb; delete p.avatarFeedThumb;
-    
+    delete p.avatarFile;
+    delete p.coverFile;
+    delete p.avatar;
+    delete p.cover;
+    delete p.avatarThumb;
+    delete p.coverThumb;
+    delete p.avatarFeedThumb;
+
     try {
         const db = await openFolderDatabase();
         await new Promise((resolve, reject) => {
             const tx = db.transaction('profiles', 'readwrite');
             tx.objectStore('profiles').put(p);
-            tx.oncomplete = resolve;
-            tx.onerror = reject;
+            tx.oncomplete = () => { db.close(); resolve(); };
+            tx.onerror = () => { const err = tx.error; db.close(); reject(err); };
         });
     } catch(e) {}
 }
@@ -2165,4 +2210,545 @@ window.addEventListener('popstate', (e) => {
             });
         }, { passive: true });
     }
+})();
+
+
+// === INYECCIÓN: EXPORTAR E IMPORTAR PERFIL (STREAMING / BAJO CONSUMO DE RAM) ===
+(function() {
+    const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB máximo por bloque en escritura
+
+    async function fileExistsInOpfs(dirHandle, filename) {
+        if (!dirHandle || !filename) return false;
+        try {
+            const fh = await dirHandle.getFileHandle(filename, { create: false });
+            const file = await fh.getFile();
+            return file.size > 0;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async function writeBlobChunked(dirHandle, filename, blob) {
+        const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable();
+        try {
+            if (blob.size <= CHUNK_SIZE) {
+                await writable.write(blob);
+            } else {
+                let offset = 0;
+                while (offset < blob.size) {
+                    const end = Math.min(offset + CHUNK_SIZE, blob.size);
+                    await writable.write(blob.slice(offset, end));
+                    offset = end;
+                }
+            }
+        } finally {
+            await writable.close();
+        }
+    }
+
+    async function preloadProfileMediaToCache(mediaDir, profile) {
+        if (!mediaDir || !profile) return;
+        const paths = [
+            profile.avatarPath,
+            profile.avatarThumbPath,
+            profile.avatarFeedThumbPath,
+            profile.coverPath,
+            profile.coverThumbPath
+        ].filter(Boolean);
+
+        for (const path of paths) {
+            try {
+                const fh = await mediaDir.getFileHandle(path);
+                const file = await fh.getFile();
+                if (file.size > 0) {
+                    if (mediaCache.has(path)) {
+                        URL.revokeObjectURL(mediaCache.get(path));
+                    }
+                    mediaCache.set(path, URL.createObjectURL(file));
+                }
+            } catch (e) {}
+        }
+    }
+
+    async function syncPendingProfileMedia(profile, mediaDir) {
+        // 1. Si el modal de edición está abierto y el usuario eligió avatar/portada sin pulsar "Guardar"
+        const editModal = document.getElementById('editModal');
+        const editProfilePic = document.getElementById('editProfilePic');
+        const editCoverPic = document.getElementById('editCoverPic');
+
+        if (editModal && editModal.style.display === 'flex') {
+            const editName = document.getElementById('editName');
+            const editHandle = document.getElementById('editHandle');
+            const editBio = document.getElementById('editBio');
+
+            if (editName && editName.value.trim()) profile.name = editName.value.trim();
+            if (editHandle && editHandle.value.trim()) profile.handle = formatUniqueHandle(editHandle.value.trim(), profile.id);
+            if (editBio) profile.bio = editBio.value.trim();
+
+            if (editProfilePic && editProfilePic.files && editProfilePic.files[0]) {
+                if (profile.avatarPath) await deleteMediaFile(profile.avatarPath);
+                if (profile.avatarThumbPath) await deleteMediaFile(profile.avatarThumbPath);
+                if (profile.avatarFeedThumbPath) await deleteMediaFile(profile.avatarFeedThumbPath);
+                profile.avatarFile = editProfilePic.files[0];
+                editProfilePic.value = '';
+            }
+            if (editCoverPic && editCoverPic.files && editCoverPic.files[0]) {
+                if (profile.coverPath) await deleteMediaFile(profile.coverPath);
+                if (profile.coverThumbPath) await deleteMediaFile(profile.coverThumbPath);
+                profile.coverFile = editCoverPic.files[0];
+                editCoverPic.value = '';
+            }
+        }
+
+        if (profile.avatarFile || profile.coverFile) {
+            await saveProfileToFolder(profile);
+            renderCurrentProfileUI();
+        }
+
+        // 2. Recuperar rutas desde IndexedDB si faltan en el objeto en memoria
+        if (!profile.avatarPath || !profile.coverPath) {
+            try {
+                const db = await openFolderDatabase();
+                const storedProfile = await new Promise((resolve) => {
+                    const tx = db.transaction('profiles', 'readonly');
+                    const req = tx.objectStore('profiles').get(profile.id);
+                    req.onsuccess = () => resolve(req.result || null);
+                    req.onerror = () => resolve(null);
+                });
+                db.close();
+                if (storedProfile) {
+                    ['avatarPath', 'avatarThumbPath', 'avatarFeedThumbPath', 'coverPath', 'coverThumbPath'].forEach(k => {
+                        if (!profile[k] && storedProfile[k]) profile[k] = storedProfile[k];
+                    });
+                }
+            } catch (e) {}
+        }
+
+        // 3. Buscar en OPFS por prefijo de ID si aún no están enlazadas las rutas de avatar/portada
+        if (mediaDir && (!profile.avatarPath || !profile.coverPath)) {
+            try {
+                for await (const [name, handle] of mediaDir.entries()) {
+                    if (handle.kind !== 'file') continue;
+                    if (name === `${profile.id}_avatar_thumb.webp`) {
+                        profile.avatarThumbPath = profile.avatarThumbPath || name;
+                    } else if (name === `${profile.id}_avatar_feed_thumb.webp`) {
+                        profile.avatarFeedThumbPath = profile.avatarFeedThumbPath || name;
+                    } else if (name.startsWith(`${profile.id}_avatar.`)) {
+                        profile.avatarPath = profile.avatarPath || name;
+                    } else if (name === `${profile.id}_cover_thumb.webp`) {
+                        profile.coverThumbPath = profile.coverThumbPath || name;
+                    } else if (name.startsWith(`${profile.id}_cover.`)) {
+                        profile.coverPath = profile.coverPath || name;
+                    }
+                }
+            } catch (e) {}
+        }
+    }
+
+    window.exportCurrentProfile = async function() {
+        const btn = document.getElementById('exportProfileBtn');
+        if (!activeProfileId || (btn && btn.disabled)) return;
+
+        const profile = profiles.find(p => p.id === activeProfileId);
+        if (!profile) {
+            alert('No se encontró el perfil activo.');
+            return;
+        }
+
+        const origText = btn ? btn.innerText : '📦 Exportar perfil';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerText = 'Preparando exportación...';
+        }
+
+        try {
+            if (!folderHandle) {
+                folderHandle = await navigator.storage.getDirectory();
+            }
+            const mediaDir = await folderHandle.getDirectoryHandle('media', { create: true });
+
+            await syncPendingProfileMedia(profile, mediaDir);
+
+            // Verificar qué archivos de avatar y portada existen realmente en OPFS
+            const validPath = async (p) => (p && await fileExistsInOpfs(mediaDir, p)) ? p : null;
+
+            const avatarPath = await validPath(profile.avatarPath);
+            const avatarThumbPath = (await validPath(profile.avatarThumbPath)) || avatarPath;
+            const avatarFeedThumbPath = (await validPath(profile.avatarFeedThumbPath)) || avatarThumbPath || avatarPath;
+            const coverPath = await validPath(profile.coverPath);
+            const coverThumbPath = (await validPath(profile.coverThumbPath)) || coverPath;
+
+            // 1. Limpiar metadatos del perfil
+            const cleanProfile = {
+                id: profile.id,
+                name: profile.name || 'Usuario',
+                handle: profile.handle || '@usuario',
+                bio: profile.bio || '',
+                avatarPath: avatarPath || avatarThumbPath || null,
+                avatarThumbPath: avatarThumbPath || null,
+                avatarFeedThumbPath: avatarFeedThumbPath || null,
+                coverPath: coverPath || coverThumbPath || null,
+                coverThumbPath: coverThumbPath || null
+            };
+
+            // 2. Recolectar todos los hilos y posts pertenecientes al perfil
+            const exportedThreads = [];
+            const mediaNamesSet = new Set();
+
+            [
+                cleanProfile.avatarPath,
+                cleanProfile.avatarThumbPath,
+                cleanProfile.avatarFeedThumbPath,
+                cleanProfile.coverPath,
+                cleanProfile.coverThumbPath
+            ].forEach(path => {
+                if (path) mediaNamesSet.add(path);
+            });
+
+            for (let i = 0; i < threadsData.length; i++) {
+                const t = threadsData[i];
+                if (!t || !Array.isArray(t.posts)) continue;
+
+                const userPosts = t.posts.filter(post => post.authorId === profile.id);
+                if (userPosts.length === 0) continue;
+
+                const cleanPosts = userPosts.map((post, idx) => {
+                    const cleanMedia = (post.media || []).map(m => {
+                        if (m.path) mediaNamesSet.add(m.path);
+                        if (m.thumbPath) mediaNamesSet.add(m.thumbPath);
+                        return {
+                            isVideo: Boolean(m.isVideo),
+                            path: m.path || null,
+                            thumbPath: m.thumbPath || null
+                        };
+                    }).filter(m => m.path || m.thumbPath);
+
+                    return {
+                        id: post.id,
+                        text: post.text || '',
+                        authorId: profile.id,
+                        isAdvanced: Boolean(post.isAdvanced),
+                        replyCount: idx === 0 ? Math.max(0, userPosts.length - 1) : 0,
+                        createdAt: post.createdAt || new Date().toISOString(),
+                        media: cleanMedia
+                    };
+                });
+
+                exportedThreads.push({
+                    id: t.id,
+                    posts: cleanPosts
+                });
+            }
+
+            // 3. Referenciar archivos en OPFS sin cargar sus bytes en RAM
+            const mediaNames = Array.from(mediaNamesSet);
+            const filesManifest = [];
+            const fileBlobs = [];
+            let currentOffset = 0;
+
+            for (let i = 0; i < mediaNames.length; i++) {
+                const filename = mediaNames[i];
+                if (!mediaDir) continue;
+                try {
+                    const fh = await mediaDir.getFileHandle(filename);
+                    const file = await fh.getFile();
+                    if (file.size <= 0) continue;
+                    filesManifest.push({
+                        name: filename,
+                        size: file.size,
+                        type: file.type || 'application/octet-stream',
+                        offset: currentOffset
+                    });
+                    fileBlobs.push(file);
+                    currentOffset += file.size;
+                } catch (e) {
+                    console.warn('Archivo multimedia omitido por no encontrarse:', filename);
+                }
+
+                if (i % 25 === 0 && btn) {
+                    const pct = Math.round(((i + 1) / mediaNames.length) * 100);
+                    btn.innerText = `Empaquetando... (${pct}%)`;
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+
+            // 4. Construir cabecera y manifiesto JSON
+            const manifestObj = {
+                format: 'tweetnote-profile-v1',
+                exportedAt: new Date().toISOString(),
+                profile: cleanProfile,
+                threads: exportedThreads,
+                files: filesManifest
+            };
+
+            const encoder = new TextEncoder();
+            const manifestBytes = encoder.encode(JSON.stringify(manifestObj));
+            const headerBytes = encoder.encode(`TNPK1:${manifestBytes.byteLength}
+`);
+
+            const archiveBlob = new Blob([headerBytes, manifestBytes, ...fileBlobs], {
+                type: 'application/octet-stream'
+            });
+
+            const cleanHandle = (cleanProfile.handle || 'perfil').replace(/^@/, '').replace(/[^a-zA-Z0-9_-]/g, '') || 'perfil';
+            const dateTag = new Date().toISOString().slice(0, 10);
+            const downloadFilename = `${cleanHandle}_${dateTag}.tnprofile`;
+
+            const downloadUrl = URL.createObjectURL(archiveBlob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = downloadFilename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            setTimeout(() => URL.revokeObjectURL(downloadUrl), 120000);
+        } catch (err) {
+            console.error('Error al exportar el perfil:', err);
+            alert('Ocurrió un error al exportar el perfil: ' + (err.message || err));
+        } finally {
+            if (btn) {
+                btn.innerText = origText;
+                btn.disabled = false;
+            }
+        }
+    };
+
+    window.importProfileFromFile = async function(event) {
+        const input = event.target;
+        const archiveFile = input && input.files ? input.files[0] : null;
+        if (!archiveFile) return;
+
+        const btn = document.getElementById('importProfileBtn');
+        const createBtn = document.querySelector('#newProfileModal .submit-btn');
+        const origText = btn ? btn.innerText : '📥 Importar perfil';
+
+        if (btn) {
+            btn.disabled = true;
+            btn.innerText = 'Leyendo archivo...';
+        }
+        if (createBtn) createBtn.disabled = true;
+
+        try {
+            // 1. Leer los primeros 128 bytes para detectar cabecera TNPK1
+            const probeBuffer = await archiveFile.slice(0, 128).arrayBuffer();
+            const probeBytes = new Uint8Array(probeBuffer);
+            let newlineIdx = -1;
+            for (let i = 0; i < probeBytes.length; i++) {
+                if (probeBytes[i] === 10) {
+                    newlineIdx = i;
+                    break;
+                }
+            }
+
+            const decoder = new TextDecoder();
+            let manifest = null;
+            let dataStartOffset = 0;
+
+            if (newlineIdx !== -1) {
+                const headerLine = decoder.decode(probeBytes.subarray(0, newlineIdx));
+                if (headerLine.startsWith('TNPK1:')) {
+                    const manifestLength = parseInt(headerLine.slice(6), 10);
+                    if (isNaN(manifestLength) || manifestLength <= 0) {
+                        throw new Error('Longitud de manifiesto inválida en el paquete.');
+                    }
+                    const manifestStart = newlineIdx + 1;
+                    dataStartOffset = manifestStart + manifestLength;
+                    if (dataStartOffset > archiveFile.size) {
+                        throw new Error('El archivo de respaldo está incompleto o corrupto.');
+                    }
+                    const manifestText = await archiveFile.slice(manifestStart, dataStartOffset).text();
+                    manifest = JSON.parse(manifestText);
+                }
+            }
+
+            if (!manifest || !manifest.profile) {
+                throw new Error('El archivo seleccionado no es un respaldo de perfil válido (.tnprofile).');
+            }
+
+            if (!folderHandle) {
+                folderHandle = await navigator.storage.getDirectory();
+            }
+            const mediaDir = await folderHandle.getDirectoryHandle('media', { create: true });
+
+            // 2. Comprobar colisiones de ID para aislar perfiles duplicados
+            const impProf = manifest.profile;
+            const idCollision = !impProf.id || profiles.some(p => p.id === impProf.id);
+            const uniqueSuffix = Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+            const newProfileId = idCollision ? ('prof_' + uniqueSuffix) : impProf.id;
+
+            // 3. Extraer cada archivo multimedia con File.slice() y escribir por bloques
+            const filesList = Array.isArray(manifest.files) ? manifest.files : [];
+            const fileMap = new Map();
+
+            for (let i = 0; i < filesList.length; i++) {
+                const fInfo = filesList[i];
+                if (!fInfo || !fInfo.name || typeof fInfo.size !== 'number' || fInfo.size <= 0) continue;
+
+                let targetFilename = fInfo.name;
+                if (idCollision || await fileExistsInOpfs(mediaDir, targetFilename)) {
+                    const ext = fInfo.name.includes('.') ? fInfo.name.split('.').pop() : 'bin';
+                    targetFilename = `${newProfileId}_m${i}_${Date.now()}.${ext}`;
+                }
+
+                const sliceStart = dataStartOffset + (fInfo.offset || 0);
+                const sliceEnd = sliceStart + fInfo.size;
+
+                if (sliceStart >= dataStartOffset && sliceEnd <= archiveFile.size) {
+                    const blobSlice = archiveFile.slice(sliceStart, sliceEnd, fInfo.type || 'application/octet-stream');
+                    await writeBlobChunked(mediaDir, targetFilename, blobSlice);
+                    fileMap.set(fInfo.name, targetFilename);
+                }
+
+                if (i % 10 === 0 && btn) {
+                    const pct = Math.round(((i + 1) / filesList.length) * 100);
+                    btn.innerText = `Importando multimedia... (${pct}%)`;
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+
+            const remapPath = (oldPath) => {
+                if (!oldPath) return undefined;
+                return fileMap.get(oldPath);
+            };
+
+            // 4. Construir el perfil importado con respaldos cruzados para avatar y portada
+            const finalProfile = {
+                id: newProfileId,
+                name: (impProf.name || 'Usuario Importado').trim(),
+                handle: formatUniqueHandle(impProf.handle || impProf.name || 'usuario'),
+                bio: impProf.bio || ''
+            };
+
+            const mappedAvatar = remapPath(impProf.avatarPath);
+            const mappedAvatarThumb = remapPath(impProf.avatarThumbPath) || mappedAvatar;
+            const mappedAvatarFeedThumb = remapPath(impProf.avatarFeedThumbPath) || mappedAvatarThumb || mappedAvatar;
+
+            if (mappedAvatar || mappedAvatarThumb) {
+                finalProfile.avatarPath = mappedAvatar || mappedAvatarThumb;
+                finalProfile.avatarThumbPath = mappedAvatarThumb || mappedAvatar;
+                finalProfile.avatarFeedThumbPath = mappedAvatarFeedThumb || mappedAvatarThumb || mappedAvatar;
+            }
+
+            const mappedCover = remapPath(impProf.coverPath);
+            const mappedCoverThumb = remapPath(impProf.coverThumbPath) || mappedCover;
+
+            if (mappedCover || mappedCoverThumb) {
+                finalProfile.coverPath = mappedCover || mappedCoverThumb;
+                finalProfile.coverThumbPath = mappedCoverThumb || mappedCover;
+            }
+
+            // Precargar fotos de perfil y portada en mediaCache para renderizado inmediato
+            await preloadProfileMediaToCache(mediaDir, finalProfile);
+
+            // 5. Construir los hilos y posts importados
+            const existingThreadIds = new Set(threadsData.map(t => t.id));
+            const importedThreads = [];
+            const rawThreads = Array.isArray(manifest.threads) ? manifest.threads : [];
+
+            for (let i = 0; i < rawThreads.length; i++) {
+                const rawT = rawThreads[i];
+                if (!rawT || !Array.isArray(rawT.posts) || rawT.posts.length === 0) continue;
+
+                const threadCollision = idCollision || !rawT.id || existingThreadIds.has(rawT.id);
+                const newThreadId = threadCollision
+                    ? (`thread_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`)
+                    : rawT.id;
+                existingThreadIds.add(newThreadId);
+
+                const newPosts = rawT.posts.map((post, pIdx) => {
+                    const newPostId = (idCollision || !post.id)
+                        ? (`post_${Date.now()}_${i}_${pIdx}_${Math.random().toString(36).slice(2, 5)}`)
+                        : post.id;
+
+                    const newMedia = (post.media || []).map(m => {
+                        const mappedMediaPath = remapPath(m.path);
+                        const mappedThumbPath = remapPath(m.thumbPath) || mappedMediaPath;
+                        const mediaObj = {
+                            isVideo: Boolean(m.isVideo),
+                            path: mappedMediaPath || mappedThumbPath
+                        };
+                        if (mappedThumbPath) mediaObj.thumbPath = mappedThumbPath;
+                        return mediaObj;
+                    }).filter(m => m.path);
+
+                    return {
+                        id: newPostId,
+                        text: post.text || '',
+                        authorId: newProfileId,
+                        isAdvanced: Boolean(post.isAdvanced),
+                        replyCount: typeof post.replyCount === 'number'
+                            ? post.replyCount
+                            : (pIdx === 0 ? Math.max(0, rawT.posts.length - 1) : 0),
+                        createdAt: post.createdAt || new Date().toISOString(),
+                        media: newMedia
+                    };
+                });
+
+                importedThreads.push({
+                    id: newThreadId,
+                    posts: newPosts
+                });
+            }
+
+            if (btn) btn.innerText = 'Guardando en base de datos...';
+
+            // 6. Guardar perfil, hilos y configuración en una sola transacción de IndexedDB
+            const db = await openFolderDatabase();
+            await new Promise((resolve, reject) => {
+                const tx = db.transaction(['profiles', 'threads', FOLDER_DB_STORE], 'readwrite');
+                tx.objectStore('profiles').put(finalProfile);
+                const threadsStore = tx.objectStore('threads');
+                for (let i = 0; i < importedThreads.length; i++) {
+                    threadsStore.put(importedThreads[i]);
+                }
+                tx.objectStore(FOLDER_DB_STORE).put({ activeProfileId: finalProfile.id }, 'app_settings');
+                tx.oncomplete = () => {
+                    db.close();
+                    resolve();
+                };
+                tx.onerror = () => {
+                    const err = tx.error;
+                    db.close();
+                    reject(err);
+                };
+            });
+
+            // 7. Actualizar estado en memoria y refrescar interfaz
+            profiles.push(finalProfile);
+            threadsData.push(...importedThreads);
+            threadsData.sort((a, b) => {
+                const maxA = a.posts && a.posts.length > 0 ? a.posts.reduce((m, p) => p.id > m ? p.id : m, a.id) : a.id;
+                const maxB = b.posts && b.posts.length > 0 ? b.posts.reduce((m, p) => p.id > m ? p.id : m, b.id) : b.id;
+                return String(maxB).localeCompare(String(maxA));
+            });
+
+            activeProfileId = finalProfile.id;
+            composerProfileId = finalProfile.id;
+            setComposerProfile(finalProfile.id);
+            renderComposerProfileOptions(finalProfile.id);
+
+            const wasInitial = isInitialProfileCreation;
+            isInitialProfileCreation = false;
+            document.getElementById('newProfileModal').style.display = 'none';
+            if (!wasInitial && history.state && history.state.view === 'newProfileModal') {
+                history.back();
+            }
+
+            switchTab('profile');
+            renderCurrentProfileUI();
+            renderAllFeed();
+        } catch (err) {
+            console.error('Error al importar el perfil:', err);
+            alert('Error al importar el perfil: ' + (err.message || err));
+        } finally {
+            input.value = '';
+            if (btn) {
+                btn.innerText = origText;
+                btn.disabled = false;
+            }
+            if (createBtn) createBtn.disabled = false;
+        }
+    };
 })();

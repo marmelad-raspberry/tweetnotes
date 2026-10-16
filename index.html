@@ -117,6 +117,7 @@
                         <input type="file" id="editCoverPic" accept="image/*" hidden>
                     </label>
                 </div>
+                <button id="exportProfileBtn" type="button" class="submit-btn" style="background: var(--primary-blue); color: #fff; margin-top: 20px; width: 100%;" onclick="exportCurrentProfile()">📦 Exportar perfil</button>
                 <button id="deleteProfileBtn" class="submit-btn" style="background: #f4212e; margin-top: 20px; width: 100%; display: none;" onclick="deleteProfile()">Eliminar perfil</button>
             </div>
         </div>
@@ -153,6 +154,10 @@
                         🖼️ Subir Portada
                         <input type="file" id="newCoverPic" accept="image/*" hidden>
                     </label>
+                </div>
+                <div id="importProfileContainer" style="border-top: 1px solid var(--border-color); margin-top: 20px; padding-top: 16px;">
+                    <button id="importProfileBtn" type="button" class="submit-btn" style="background: var(--primary-blue); color: #fff; width: 100%;" onclick="document.getElementById('importProfileInput').click()">📥 Importar perfil</button>
+                    <input type="file" id="importProfileInput" hidden onchange="importProfileFromFile(event)">
                 </div>
             </div>
         </div>
