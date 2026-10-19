@@ -438,8 +438,6 @@ body.in-thread-view .feed .thread-container:not(.active-thread) { display: none 
         justify-content: center !important;
         padding: 24px !important;
         background: rgba(0, 0, 0, 0.55) !important;
-        -webkit-backdrop-filter: blur(4px) !important;
-        backdrop-filter: blur(4px) !important;
         animation: none !important;
     }
 
@@ -529,8 +527,6 @@ body.pc-theme #editModal {
     justify-content: center !important;
     padding: 24px !important;
     background: rgba(0, 0, 0, 0.55) !important;
-    -webkit-backdrop-filter: blur(4px) !important;
-    backdrop-filter: blur(4px) !important;
     animation: none !important;
 }
 

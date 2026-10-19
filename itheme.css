@@ -285,8 +285,6 @@ body {
         justify-content: center !important;
         padding: 24px !important;
         background: rgba(0, 0, 0, 0.55) !important;
-        -webkit-backdrop-filter: blur(4px) !important;
-        backdrop-filter: blur(4px) !important;
         animation: none !important;
     }
 
@@ -376,8 +374,6 @@ body.pc-theme #editModal {
     justify-content: center !important;
     padding: 24px !important;
     background: rgba(0, 0, 0, 0.55) !important;
-    -webkit-backdrop-filter: blur(4px) !important;
-    backdrop-filter: blur(4px) !important;
     animation: none !important;
 }
 
@@ -412,6 +408,22 @@ body.pc-theme #postModal .media-actions {
 #editModal,
 #newProfileModal {
     background: rgba(0, 0, 0, 0.35) !important;
-    -webkit-backdrop-filter: blur(20px) !important;
-    backdrop-filter: blur(20px) !important;
+}
+
+
+/* === SCRIPT: MODALES POST/PERFIL SIN BLUR ===
+   Ventanas de post y perfil: fondo oscuro translúcido, sin blur.
+   La barra de pestañas (.bottom-tabs) conserva su blur. */
+#postModal, #editModal, #newProfileModal,
+body.pc-theme #postModal, body.pc-theme #editModal, body.pc-theme #newProfileModal {
+    background: rgba(0, 0, 0, 0.5) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+
+#postModal .modal-header, #editModal .modal-header, #newProfileModal .modal-header,
+body.pc-theme #postModal .modal-header, body.pc-theme #editModal .modal-header,
+body.pc-theme #newProfileModal .modal-header {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
 }
