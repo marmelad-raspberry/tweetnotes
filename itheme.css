@@ -212,3 +212,197 @@ body {
     border-top: 1px solid var(--border-color) !important;
     padding-bottom: env(safe-area-inset-bottom, 12px) !important;
 }
+
+
+/* === INYECCIÓN: TEMA ADAPTADO A ESCRITORIO (PC) === */
+@media (min-width: 768px) {
+    body.pc-theme .container,
+    .container {
+        max-width: 1100px !important;
+        width: 100% !important;
+    }
+
+    body.pc-theme .bottom-tabs,
+    .bottom-tabs {
+        max-width: 1100px !important;
+        width: 100% !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+    }
+
+    /* Previews de multimedia más pequeños */
+    body.pc-theme .post .media-grid,
+    .post .media-grid {
+        max-width: 360px !important;
+    }
+
+    body.pc-theme .post .grid-1 .media-item-wrap,
+    .post .grid-1 .media-item-wrap {
+        max-height: 240px !important;
+    }
+
+    body.pc-theme .post .grid-2,
+    body.pc-theme .post .grid-3,
+    body.pc-theme .post .grid-4,
+    .post .grid-2,
+    .post .grid-3,
+    .post .grid-4 {
+        height: 180px !important;
+    }
+
+    body.pc-theme #postMediaPreview,
+    #postMediaPreview {
+        max-width: 280px !important;
+    }
+
+    body.pc-theme #postMediaPreview.grid-1 .media-item-wrap,
+    #postMediaPreview.grid-1 .media-item-wrap {
+        max-height: 160px !important;
+    }
+
+    body.pc-theme #postMediaPreview.grid-2,
+    body.pc-theme #postMediaPreview.grid-3,
+    body.pc-theme #postMediaPreview.grid-4,
+    #postMediaPreview.grid-2,
+    #postMediaPreview.grid-3,
+    #postMediaPreview.grid-4 {
+        height: 140px !important;
+    }
+
+    body.pc-theme .profile-media-gallery,
+    .profile-media-gallery {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+    }
+
+    /* Ventanas de escribir post y crear/editar perfiles centralizadas y flotando */
+    body.pc-theme #postModal,
+    body.pc-theme #newProfileModal,
+    body.pc-theme #editModal,
+    #postModal,
+    #newProfileModal,
+    #editModal {
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 24px !important;
+        background: rgba(0, 0, 0, 0.55) !important;
+        -webkit-backdrop-filter: blur(4px) !important;
+        backdrop-filter: blur(4px) !important;
+        animation: none !important;
+    }
+
+    body.pc-theme #postModal .modal-content,
+    body.pc-theme #newProfileModal .modal-content,
+    body.pc-theme #editModal .modal-content,
+    #postModal .modal-content,
+    #newProfileModal .modal-content,
+    #editModal .modal-content {
+        max-width: 560px !important;
+        width: 100% !important;
+        height: auto !important;
+        max-height: 85vh !important;
+        margin: auto !important;
+        border-radius: 16px !important;
+        padding-bottom: 0 !important;
+        border: 1px solid var(--border-color) !important;
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35) !important;
+        animation: none !important;
+    }
+
+    body.pc-theme #postModal .modal-header,
+    body.pc-theme #newProfileModal .modal-header,
+    body.pc-theme #editModal .modal-header,
+    #postModal .modal-header,
+    #newProfileModal .modal-header,
+    #editModal .modal-header {
+        border-radius: 16px 16px 0 0 !important;
+    }
+
+    body.pc-theme #postModal .media-actions,
+    #postModal .media-actions {
+        border-radius: 0 0 16px 16px !important;
+        padding-bottom: 12px !important;
+    }
+}
+
+/* Reglas directas cuando se activa body.pc-theme por detección de versión de escritorio */
+body.pc-theme .container {
+    max-width: 1100px !important;
+    width: 100% !important;
+}
+
+body.pc-theme .bottom-tabs {
+    max-width: 1100px !important;
+    width: 100% !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+}
+
+body.pc-theme .post .media-grid {
+    max-width: 360px !important;
+}
+
+body.pc-theme .post .grid-1 .media-item-wrap {
+    max-height: 240px !important;
+}
+
+body.pc-theme .post .grid-2,
+body.pc-theme .post .grid-3,
+body.pc-theme .post .grid-4 {
+    height: 180px !important;
+}
+
+body.pc-theme #postMediaPreview {
+    max-width: 280px !important;
+}
+
+body.pc-theme #postMediaPreview.grid-1 .media-item-wrap {
+    max-height: 160px !important;
+}
+
+body.pc-theme #postMediaPreview.grid-2,
+body.pc-theme #postMediaPreview.grid-3,
+body.pc-theme #postMediaPreview.grid-4 {
+    height: 140px !important;
+}
+
+body.pc-theme .profile-media-gallery {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+}
+
+body.pc-theme #postModal,
+body.pc-theme #newProfileModal,
+body.pc-theme #editModal {
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 24px !important;
+    background: rgba(0, 0, 0, 0.55) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+    backdrop-filter: blur(4px) !important;
+    animation: none !important;
+}
+
+body.pc-theme #postModal .modal-content,
+body.pc-theme #newProfileModal .modal-content,
+body.pc-theme #editModal .modal-content {
+    max-width: 560px !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: 85vh !important;
+    margin: auto !important;
+    border-radius: 16px !important;
+    padding-bottom: 0 !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35) !important;
+    animation: none !important;
+}
+
+body.pc-theme #postModal .modal-header,
+body.pc-theme #newProfileModal .modal-header,
+body.pc-theme #editModal .modal-header {
+    border-radius: 16px 16px 0 0 !important;
+}
+
+body.pc-theme #postModal .media-actions {
+    border-radius: 0 0 16px 16px !important;
+    padding-bottom: 12px !important;
+}

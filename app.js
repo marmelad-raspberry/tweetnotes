@@ -2752,3 +2752,191 @@ window.addEventListener('popstate', (e) => {
         }
     };
 })();
+
+
+// === INYECCIÓN: DETECCIÓN DE VERSIÓN DE ESCRITORIO (PC) ===
+(function() {
+    function checkDesktopTheme() {
+        const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(navigator.userAgent);
+        const isWideScreen = window.innerWidth >= 768;
+        if (!isMobileUA || isWideScreen) {
+            document.body.classList.add('pc-theme');
+        } else {
+            document.body.classList.remove('pc-theme');
+        }
+    }
+    window.addEventListener('resize', checkDesktopTheme);
+    checkDesktopTheme();
+})();
+
+// === VISOR-NAV-ESCRITORIO: flechas del teclado y botones (solo escritorio) ===
+(function () {
+    const isDesktop = () => document.body.classList.contains('pc-theme');
+    const isFlex = el => !!el && el.style.display === 'flex';
+
+    const ICONS = {
+        left:  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>',
+        right: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+        up:    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>',
+        down:  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'
+    };
+
+    function makeButton(className, icon, label, onActivate) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'viewer-nav-btn ' + className;
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+        btn.innerHTML = icon;
+        // Evita que el botón robe el foco: así las flechas del teclado siguen funcionando.
+        btn.addEventListener('mousedown', e => e.preventDefault());
+        btn.addEventListener('click', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            onActivate();
+        });
+        return btn;
+    }
+
+    function watchOpen(modal, onOpen) {
+        new MutationObserver(() => {
+            if (isFlex(modal)) onOpen();
+        }).observe(modal, { attributes: true, attributeFilter: ['style'] });
+    }
+
+    function throttleRaf(fn) {
+        let scheduled = false;
+        return () => {
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(() => {
+                scheduled = false;
+                fn();
+            });
+        };
+    }
+
+    // ---------------- Visor horizontal (imageViewerModal) ----------------
+    const hModal = document.getElementById('imageViewerModal');
+    const hContent = document.getElementById('imageViewerContent');
+    let hPending = null;   // índice de destino mientras dura un desplazamiento
+    let hTimer = null;
+    let hScrollEnd = null;
+
+    const hPrev = makeButton('viewer-nav-prev', ICONS.left, 'Anterior (←)', () => hGoTo(hCurrentIndex() - 1));
+    const hNext = makeButton('viewer-nav-next', ICONS.right, 'Siguiente (→)', () => hGoTo(hCurrentIndex() + 1));
+    hModal.append(hPrev, hNext);
+
+    function hCurrentIndex() {
+        if (hPending !== null) return hPending;
+        const w = hContent.clientWidth || 1;
+        return Math.round(hContent.scrollLeft / w);
+    }
+
+    function hGoTo(index) {
+        const total = viewerImages.length;
+        if (!total) return;
+        const target = Math.max(0, Math.min(total - 1, index));
+        if (target === hCurrentIndex()) return;
+
+        hPending = target;
+        clearTimeout(hTimer);
+        hTimer = setTimeout(() => { hPending = null; hRefresh(); }, 700);
+
+        hContent.scrollTo({ left: target * hContent.clientWidth, behavior: 'smooth' });
+        hRefresh();
+    }
+
+    function hRefresh() {
+        const total = viewerImages.length;
+        const idx = hCurrentIndex();
+        hPrev.disabled = idx <= 0;
+        hNext.disabled = idx >= total - 1;
+    }
+
+    const hRefreshRaf = throttleRaf(hRefresh);
+    hContent.addEventListener('scroll', () => {
+        hRefreshRaf();
+        clearTimeout(hScrollEnd);
+        hScrollEnd = setTimeout(() => { hPending = null; hRefresh(); }, 150);
+    }, { passive: true });
+
+    watchOpen(hModal, () => { hPending = null; hRefresh(); });
+
+    // ---------------- Visor vertical (verticalViewerModal) ----------------
+    const vModal = document.getElementById('verticalViewerModal');
+    const vScroll = document.getElementById('verticalViewerScroll');
+    let vPending = null;
+    let vTimer = null;
+    let vScrollEnd = null;
+
+    const vGroup = document.createElement('div');
+    vGroup.className = 'viewer-nav-group';
+    const vUp = makeButton('viewer-nav-up', ICONS.up, 'Anterior (↑)', () => vGoTo(vCurrentIndex() - 1));
+    const vDown = makeButton('viewer-nav-down', ICONS.down, 'Siguiente (↓)', () => vGoTo(vCurrentIndex() + 1));
+    vGroup.append(vUp, vDown);
+    vModal.append(vGroup);
+
+    function vCurrentIndex() {
+        if (vPending !== null) return vPending;
+        const h = vScroll.clientHeight || 1;
+        return Math.round(vScroll.scrollTop / h);
+    }
+
+    function vGoTo(index) {
+        const total = vScroll.children.length;
+        if (!total) return;
+        const target = Math.max(0, Math.min(total - 1, index));
+        if (target === vCurrentIndex()) return;
+
+        vPending = target;
+        clearTimeout(vTimer);
+        vTimer = setTimeout(() => { vPending = null; vRefresh(); }, 700);
+
+        vScroll.scrollTo({ top: target * vScroll.clientHeight, behavior: 'smooth' });
+        vRefresh();
+    }
+
+    function vRefresh() {
+        const total = verticalViewerImages.length;
+        const idx = vCurrentIndex();
+        vUp.disabled = idx <= 0;
+        // La galería vertical es infinita (en bucle), así que "abajo" siempre está disponible.
+    }
+
+    const vRefreshRaf = throttleRaf(vRefresh);
+    vScroll.addEventListener('scroll', () => {
+        vRefreshRaf();
+        clearTimeout(vScrollEnd);
+        vScrollEnd = setTimeout(() => { vPending = null; vRefresh(); }, 150);
+    }, { passive: true });
+
+    watchOpen(vModal, () => { vPending = null; setTimeout(vRefresh, 60); });
+
+    // ---------------- Teclado (solo escritorio) ----------------
+    document.addEventListener('keydown', function (e) {
+        if (!isDesktop()) return;
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
+
+        const t = e.target;
+        if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+
+        if (isFlex(vModal)) {
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                vGoTo(vCurrentIndex() - 1);
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                vGoTo(vCurrentIndex() + 1);
+            }
+        } else if (isFlex(hModal)) {
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                hGoTo(hCurrentIndex() - 1);
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                hGoTo(hCurrentIndex() + 1);
+            }
+        }
+    });
+})();
