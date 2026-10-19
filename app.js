@@ -2940,3 +2940,58 @@ window.addEventListener('popstate', (e) => {
         }
     });
 })();
+
+// [bloqueo-scroll-perfil] === INYECCIÓN: BLOQUEO DE DESPLAZAMIENTO EN MODALES (POST Y PERFIL) ===
+(function () {
+    const LOCK_CLASS = 'post-modal-lock';
+    const LOCKING_MODAL_IDS = ['postModal', 'editModal', 'newProfileModal'];
+    const modals = LOCKING_MODAL_IDS
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+    if (modals.length === 0) return;
+
+    let isLocked = false;
+
+    function anyLockingModalOpen() {
+        return modals.some(m => m.style.display === 'flex');
+    }
+
+    function lockScroll() {
+        if (isLocked) return;
+        isLocked = true;
+        // Compensa la barra de desplazamiento (escritorio) para que el contenido no salte.
+        const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+        if (scrollbarWidth > 0) document.body.style.paddingRight = scrollbarWidth + 'px';
+        document.documentElement.classList.add(LOCK_CLASS);
+        document.body.classList.add(LOCK_CLASS);
+    }
+
+    function unlockScroll() {
+        if (!isLocked) return;
+        isLocked = false;
+        document.documentElement.classList.remove(LOCK_CLASS);
+        document.body.classList.remove(LOCK_CLASS);
+        document.body.style.paddingRight = '';
+    }
+
+    function syncScrollLock() {
+        if (anyLockingModalOpen()) lockScroll(); else unlockScroll();
+    }
+
+    modals.forEach(modal => {
+        // Reacciona a cualquier apertura o cierre del modal (openX, closeX, popstate...).
+        new MutationObserver(syncScrollLock)
+            .observe(modal, { attributes: true, attributeFilter: ['style'] });
+
+        // iOS ignora overflow:hidden en body: bloqueamos el arrastre (táctil) y la rueda
+        // (escritorio) sobre el fondo. El contenido de .modal-content sigue siendo scrolleable.
+        modal.addEventListener('touchmove', e => {
+            if (!e.target.closest('.modal-content')) e.preventDefault();
+        }, { passive: false });
+        modal.addEventListener('wheel', e => {
+            if (!e.target.closest('.modal-content')) e.preventDefault();
+        }, { passive: false });
+    });
+
+    syncScrollLock();
+})();

@@ -652,3 +652,21 @@ body.pc-theme .viewer-nav-group {
 .viewer-nav-group .viewer-nav-btn {
     position: static;
 }
+
+/* === INYECCIÓN: BLOQUEO DE DESPLAZAMIENTO CON VENTANA DE POST === */
+html.post-modal-lock,
+body.post-modal-lock {
+    overflow: hidden !important;
+    overscroll-behavior: none;
+}
+
+/* Evita que el desplazamiento del contenido del post se propague a la página */
+#postModal .modal-content {
+    overscroll-behavior: contain;
+}
+
+/* [bloqueo-scroll-perfil] */
+#editModal .modal-content,
+#newProfileModal .modal-content {
+    overscroll-behavior: contain;
+}
