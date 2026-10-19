@@ -406,3 +406,12 @@ body.pc-theme #postModal .media-actions {
     border-radius: 0 0 16px 16px !important;
     padding-bottom: 12px !important;
 }
+
+/* === CAMBIO: FONDO DESENFOCADO EN MODALES DE POST Y PERFIL === */
+#postModal,
+#editModal,
+#newProfileModal {
+    background: rgba(0, 0, 0, 0.35) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    backdrop-filter: blur(20px) !important;
+}

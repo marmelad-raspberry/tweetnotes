@@ -906,7 +906,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         const mediaLbl = document.getElementById('mediaUploadLabel');
         const mediaInp = document.getElementById('postMedia');
         if (!mediaLbl || !mediaInp) return;
-        const isDisabled = Boolean(window.isAdvancedMode) || selectedMediaFiles.length >= MAX_MEDIA_PER_POST;
+        const isDisabled = selectedMediaFiles.length >= MAX_MEDIA_PER_POST;
         mediaLbl.style.opacity = isDisabled ? '0.4' : '1';
         mediaLbl.style.pointerEvents = isDisabled ? 'none' : 'auto';
         mediaInp.disabled = isDisabled;
