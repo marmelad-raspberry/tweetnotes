@@ -1159,7 +1159,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
             <div class="post-main">
                 <div class="post-header" style="justify-content: space-between; width: 100%;">
                     <div style="display: flex; gap: 4px; align-items: center;"><span class="post-author sync-name profile-link" role="button" tabindex="0">${escapeHtml(ap.name || 'Usuario')}</span><span class="post-handle sync-handle profile-link" role="button" tabindex="0">${escapeHtml(ap.handle || '@usuario')} · ${dateStr}</span></div>
-                    <div class="post-options" style="position: relative;"><button class="post-options-btn" onclick="toggleDropdown(event, this)">⋮</button><div class="post-dropdown"><div class="post-dropdown-item" onclick="editPost(event, this)">Editar</div><div class="post-dropdown-item danger" onclick="deletePost(event, this)">Eliminar</div></div></div>
+                    <div class="post-options" style="position: relative;"><button class="post-options-btn" onclick="toggleDropdown(event, this)">⋮</button><div class="post-dropdown"><div class="post-dropdown-item" onclick="editPost(event, this)">Editar</div>${mArr && mArr.length > 0 ? '<div class="post-dropdown-item" onclick="downloadPostMedia(event, this)">Descargar .zip</div>' : ''}<div class="post-dropdown-item danger" onclick="deletePost(event, this)">Eliminar</div></div></div>
                 </div>
                 ${text ? `<div class="post-content">${div.dataset.isAdvanced === 'true' ? text : renderTextWithHashtags(text)}</div>` : ''}
             </div>
@@ -2994,4 +2994,231 @@ window.addEventListener('popstate', (e) => {
     });
 
     syncScrollLock();
+})();
+
+
+// === INYECCIÓN: DESCARGAR MULTIMEDIA ORIGINAL DEL POST EN .ZIP ===
+(function () {
+    const CRC_CHUNK = 8 * 1024 * 1024;   // Lectura por bloques para no cargar archivos grandes en RAM
+    const ZIP_MAX_SIZE = 0xFFFFFFFF;     // Límite de ZIP sin ZIP64
+    const ZIP_MAX_ENTRIES = 0xFFFF;
+
+    const CRC_TABLE = (function () {
+        const table = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) {
+            let c = n;
+            for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+            table[n] = c >>> 0;
+        }
+        return table;
+    })();
+
+    async function crc32Blob(blob) {
+        let crc = 0xFFFFFFFF;
+        for (let offset = 0; offset < blob.size; offset += CRC_CHUNK) {
+            const end = Math.min(offset + CRC_CHUNK, blob.size);
+            const bytes = new Uint8Array(await blob.slice(offset, end).arrayBuffer());
+            for (let i = 0; i < bytes.length; i++) {
+                crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+            }
+        }
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    function toDosDateTime(date) {
+        return {
+            time: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+            date: ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()
+        };
+    }
+
+    // Construye un ZIP en modo "store" (sin compresión): las fotos y videos ya están comprimidos.
+    async function buildZipBlob(entries) {
+        if (entries.length > ZIP_MAX_ENTRIES) throw new Error('Demasiados archivos para un ZIP.');
+
+        const encoder = new TextEncoder();
+        const dos = toDosDateTime(new Date());
+        const localParts = [];
+        const centralParts = [];
+        let offset = 0;
+        let centralSize = 0;
+
+        for (const entry of entries) {
+            const nameBytes = encoder.encode(entry.name);
+            const size = entry.blob.size;
+            const crc = await crc32Blob(entry.blob);
+
+            // Cabecera local del archivo
+            const local = new DataView(new ArrayBuffer(30));
+            local.setUint32(0, 0x04034b50, true);     // firma
+            local.setUint16(4, 20, true);             // versión necesaria
+            local.setUint16(6, 0x0800, true);         // flag: nombres en UTF-8
+            local.setUint16(8, 0, true);              // método 0 = sin compresión
+            local.setUint16(10, dos.time, true);
+            local.setUint16(12, dos.date, true);
+            local.setUint32(14, crc, true);
+            local.setUint32(18, size, true);          // tamaño comprimido
+            local.setUint32(22, size, true);          // tamaño original
+            local.setUint16(26, nameBytes.length, true);
+            local.setUint16(28, 0, true);             // extra
+
+            // Entrada del directorio central
+            const central = new DataView(new ArrayBuffer(46));
+            central.setUint32(0, 0x02014b50, true);   // firma
+            central.setUint16(4, 20, true);           // versión usada
+            central.setUint16(6, 20, true);           // versión necesaria
+            central.setUint16(8, 0x0800, true);
+            central.setUint16(10, 0, true);
+            central.setUint16(12, dos.time, true);
+            central.setUint16(14, dos.date, true);
+            central.setUint32(16, crc, true);
+            central.setUint32(20, size, true);
+            central.setUint32(24, size, true);
+            central.setUint16(28, nameBytes.length, true);
+            central.setUint16(30, 0, true);           // extra
+            central.setUint16(32, 0, true);           // comentario
+            central.setUint16(34, 0, true);           // disco
+            central.setUint16(36, 0, true);           // atributos internos
+            central.setUint32(38, 0, true);           // atributos externos
+            central.setUint32(42, offset, true);      // posición de la cabecera local
+
+            localParts.push(local.buffer, nameBytes, entry.blob);
+            centralParts.push(central.buffer, nameBytes);
+            centralSize += 46 + nameBytes.length;
+            offset += 30 + nameBytes.length + size;
+
+            if (offset > ZIP_MAX_SIZE) throw new Error('El ZIP supera el límite de 4 GB.');
+        }
+
+        // Registro de fin del directorio central
+        const eocd = new DataView(new ArrayBuffer(22));
+        eocd.setUint32(0, 0x06054b50, true);
+        eocd.setUint16(4, 0, true);
+        eocd.setUint16(6, 0, true);
+        eocd.setUint16(8, entries.length, true);
+        eocd.setUint16(10, entries.length, true);
+        eocd.setUint32(12, centralSize, true);
+        eocd.setUint32(16, offset, true);
+        eocd.setUint16(20, 0, true);
+
+        return new Blob([...localParts, ...centralParts, eocd.buffer], { type: 'application/zip' });
+    }
+
+    function getPostContext(btn) {
+        const pEl = btn.closest('.post');
+        if (!pEl) return null;
+        const tEl = pEl.closest('.thread-container, .profile-response-context');
+        const t = tEl ? threadsData.find(th => th.id === tEl.dataset.threadId) : null;
+        const post = t ? t.posts.find(po => po.id === pEl.dataset.id) : null;
+        return { pEl, post, media: (post ? post.media : pEl.mediaData) || [] };
+    }
+
+    // Devuelve el archivo ORIGINAL (no la miniatura) de un elemento multimedia.
+    async function resolveMediaFile(m, mediaDir) {
+        if (m.file instanceof Blob) return m.file;
+        if (m.path) return await (await mediaDir.getFileHandle(m.path)).getFile();
+        return null;
+    }
+
+    function extensionOf(name, isVideo) {
+        const match = /\.([a-zA-Z0-9]+)$/.exec(name || '');
+        return match ? match[1].toLowerCase() : (isVideo ? 'mp4' : 'jpg');
+    }
+
+    function buildZipName(postId, authorId) {
+        const author = profiles.find(p => p.id === authorId);
+        const handle = String((author && author.handle) || 'usuario').replace(/^@/, '').replace(/[^a-zA-Z0-9_-]/g, '') || 'usuario';
+        const id = String(postId || 'post').replace(/[^a-zA-Z0-9_-]/g, '') || 'post';
+        return `${handle}_${id}_multimedia.zip`;
+    }
+
+    function triggerDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 120000);
+    }
+
+    window.downloadPostMedia = async function (e, btn) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Cerrar el menú ⋮ inmediatamente
+        const dropdown = btn.closest('.post-dropdown');
+        if (dropdown) dropdown.style.display = 'none';
+
+        if (btn.dataset.busy === 'true') return;
+
+        const ctx = getPostContext(btn);
+        if (!ctx) return;
+        const media = ctx.media;
+        if (media.length === 0) {
+            alert('Este post no tiene multimedia.');
+            return;
+        }
+
+        const origText = btn.textContent;
+        btn.dataset.busy = 'true';
+        btn.style.pointerEvents = 'none';
+        btn.style.opacity = '0.6';
+        btn.textContent = 'Preparando ZIP...';
+
+        try {
+            if (!folderHandle) folderHandle = await navigator.storage.getDirectory();
+            const mediaDir = await folderHandle.getDirectoryHandle('media', { create: true });
+
+            const entries = [];
+            const missing = [];
+
+            for (let i = 0; i < media.length; i++) {
+                const m = media[i];
+                const sourceName = m.path || (m.file && m.file.name) || '';
+
+                let blob = null;
+                try { blob = await resolveMediaFile(m, mediaDir); } catch (err) { blob = null; }
+
+                if (blob && blob.size > 0) {
+                    const ext = extensionOf(sourceName, m.isVideo);
+                    const index = String(entries.length + 1).padStart(2, '0');
+                    entries.push({ name: `${index}_${m.isVideo ? 'video' : 'imagen'}.${ext}`, blob });
+                } else {
+                    missing.push(sourceName || `archivo ${i + 1}`);
+                }
+
+                btn.textContent = `Preparando ZIP... (${Math.round(((i + 1) / media.length) * 100)}%)`;
+                await new Promise(r => setTimeout(r, 0));
+            }
+
+            if (entries.length === 0) {
+                alert('No se encontraron los archivos multimedia de este post en el almacenamiento.');
+                return;
+            }
+
+            const totalBytes = entries.reduce((sum, en) => sum + en.blob.size, 0);
+            if (totalBytes > ZIP_MAX_SIZE) {
+                alert('La multimedia de este post supera 4 GB y no puede empaquetarse en un ZIP.');
+                return;
+            }
+
+            const zipBlob = await buildZipBlob(entries);
+            const zipName = buildZipName(ctx.post ? ctx.post.id : ctx.pEl.dataset.id, ctx.pEl.dataset.authorId);
+            triggerDownload(zipBlob, zipName);
+
+            if (missing.length > 0) {
+                alert(`Se incluyeron ${entries.length} de ${media.length} archivos. No se encontraron: ${missing.join(', ')}`);
+            }
+        } catch (err) {
+            console.error('Error al descargar la multimedia del post:', err);
+            alert('Ocurrió un error al crear el ZIP: ' + (err.message || err));
+        } finally {
+            btn.textContent = origText;
+            btn.style.pointerEvents = '';
+            btn.style.opacity = '';
+            delete btn.dataset.busy;
+        }
+    };
 })();
