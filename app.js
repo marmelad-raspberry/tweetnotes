@@ -542,7 +542,12 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
     }
 
     function escapeHtml(value) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#039;'); }
-    function renderTextWithHashtags(text) { return escapeHtml(text).replace(/\n/g, '<br>').replace(/(^|[\s(])(#(?:[\p{L}\p{N}_][\p{L}\p{N}_-]*))/gu, (m, p, h) => `${p}<a href=\"#\" class=\"hashtag-link\" data-hashtag=\"${h.replace(/'/g, '&#039;')}\" onclick=\"searchHashtag(event, this.dataset.hashtag)\">${h}</a>`); }
+    /* [fix-newlines] */ function renderTextWithHashtags(text) {
+        const normalized = String(text ?? '').replace(/\r\n?/g, '\n');
+        return escapeHtml(normalized)
+            .replace(/(^|[\s(])(#(?:[\p{L}\p{N}_][\p{L}\p{N}_-]*))/gu, (m, p, h) => `${p}<a href="#" class="hashtag-link" data-hashtag="${h.replace(/'/g, '&#039;')}" onclick="searchHashtag(event, this.dataset.hashtag)">${h}</a>`)
+            .replace(/\n/g, '<br>');
+    }
     function normalizeSearchText(v) { return String(v || '').trim().toLocaleLowerCase(); }
     function getSearchTerms(q) { return normalizeSearchText(q).split(/\s+/).map(t => t.replace(/^#+/, '#')).filter(Boolean); }
     function postMatchesSearch(post, q) { const terms = getSearchTerms(q); if (!terms.length) return false; const haystack = normalizeSearchText(post.text); return terms.every(t => haystack.includes(t)); }
@@ -933,10 +938,10 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
     });
 
     function renderMediaPreview() {
-        const c = document.getElementById('postMediaPreview'); c.innerHTML = ''; c.className = 'media-grid';
+        const c = document.getElementById('postMediaPreview'); c.innerHTML = ''; c.className = 'media-grid media-preview-grid';
         if (selectedMediaFiles.length > 0) {
-            if (selectedMediaFiles.length <= 4) { c.classList.add(`grid-${selectedMediaFiles.length}`); c.style.gridTemplateColumns = ''; c.style.gridAutoRows = ''; } 
-            else { c.style.gridTemplateColumns = 'repeat(auto-fit, minmax(120px, 1fr))'; c.style.gridAutoRows = '120px'; }
+            if (selectedMediaFiles.length <= 4) {  c.style.gridTemplateColumns = ''; c.style.gridAutoRows = ''; } 
+            else { c.style.gridTemplateColumns = ''; c.style.gridAutoRows = ''; }
             c.style.display = 'grid';
             selectedMediaFiles.forEach((m, i) => {
                 const w = document.createElement('div'); w.className = 'media-preview-wrapper';
@@ -950,7 +955,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                     vo.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
                     wrap.appendChild(vo);
                 }
-                const rb = document.createElement('button'); rb.innerHTML = '&times;'; rb.className = 'remove-media-btn'; rb.onclick = e => { e.preventDefault(); const removed = selectedMediaFiles.splice(i, 1)[0]; if(removed.thumbnailUrl && removed.file) URL.revokeObjectURL(removed.thumbnailUrl); renderMediaPreview(); };
+                const rb = document.createElement('button'); rb.innerHTML = '&times;'; rb.className = 'remove-media-btn'; rb.title = 'Quitar'; rb.setAttribute('aria-label', 'Quitar archivo'); rb.onclick = e => { e.preventDefault(); const removed = selectedMediaFiles.splice(i, 1)[0]; if(removed.thumbnailUrl && removed.file) URL.revokeObjectURL(removed.thumbnailUrl); renderMediaPreview(); };
                 w.appendChild(wrap); w.appendChild(rb); c.appendChild(w);
             });
         } else c.style.display = 'none';
@@ -1172,6 +1177,29 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         pm.appendChild(act);
     }
 
+    /* [fix-newlines] */ function getEditorPlainText(root) {
+        let out = '';
+        const walk = node => {
+            node.childNodes.forEach(child => {
+                if (child.nodeType === 3) {
+                    out += child.nodeValue.replace(/\n/g, ' ');
+                    return;
+                }
+                if (child.nodeType !== 1) return;
+                const tag = child.nodeName;
+                if (tag === 'BR') { out += '\n'; return; }
+                if (tag === 'DIV' || tag === 'P') {
+                    if (out && !out.endsWith('\n')) out += '\n';
+                    walk(child);
+                    return;
+                }
+                walk(child);
+            });
+        };
+        walk(root);
+        return out.replace(/\r\n?/g, '\n');
+    }
+
     async function submitPost() {
     const postBtn = document.getElementById('postSubmitBtn');
     if (postBtn && postBtn.disabled) return;
@@ -1181,7 +1209,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         postBtn.disabled = true;
     }
     try {
-        const ptEl = document.getElementById('postText'); const text = window.isAdvancedMode ? ptEl.innerHTML.trim() : ptEl.innerText.trim(); const selId = composerProfileId;
+        const ptEl = document.getElementById('postText'); const text = window.isAdvancedMode ? ptEl.innerHTML.trim() : getEditorPlainText(ptEl).trim(); const selId = composerProfileId;
         if (!selId || (!text && selectedMediaFiles.length === 0)) return;
 
         let threadToSave = null;
@@ -3708,4 +3736,122 @@ window.addEventListener('popstate', (e) => {
         const modal = document.getElementById('moveProfileModal');
         if (modal && modal.style.display === 'flex' && view !== 'moveProfileModal') closeMoveProfileModal(true);
     });
+})();
+
+/* [fijar-post] === INYECCIÓN: FIJAR POST PRINCIPAL EN EL PERFIL === */
+(function () {
+    const PIN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"/></svg>';
+
+    // Solo el post principal (índice 0 del hilo) puede fijarse.
+    function findMainThread(postId) {
+        return threadsData.find(t => t.posts && t.posts[0] && t.posts[0].id === postId) || null;
+    }
+
+    // Un post está fijado si tiene marca de fijado y sigue en el mismo perfil.
+    // Si se mueve a otro perfil, deja de estar fijado allí.
+    function isPinned(post) {
+        return !!(post && post.pinnedAt && post.pinnedFor === post.authorId);
+    }
+
+    // Marca de tiempo más reciente usada, para que el último fijado siempre gane.
+    function latestPinStamp() {
+        return threadsData.reduce((max, t) => {
+            const v = (t.posts && t.posts[0] && t.posts[0].pinnedAt) || 0;
+            return v > max ? v : max;
+        }, 0);
+    }
+
+    function showPinToast(message) {
+        let el = document.getElementById('postIoToast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'postIoToast';
+            el.className = 'post-io-toast';
+            document.body.appendChild(el);
+        }
+        el.textContent = message;
+        el.style.display = 'block';
+        clearTimeout(showPinToast.timer);
+        showPinToast.timer = setTimeout(() => { el.style.display = 'none'; }, 2200);
+    }
+
+    async function togglePinPost(e, btn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const dd = btn.closest('.post-dropdown');
+        if (dd) dd.style.display = 'none';
+
+        const pEl = btn.closest('.post');
+        const thread = pEl ? findMainThread(pEl.dataset.id) : null;
+        if (!thread) return;
+        const main = thread.posts[0];
+
+        if (isPinned(main)) {
+            delete main.pinnedAt;
+            delete main.pinnedFor;
+            showPinToast('Post desfijado del perfil.');
+        } else {
+            main.pinnedAt = Math.max(Date.now(), latestPinStamp() + 1);
+            main.pinnedFor = main.authorId;
+            showPinToast('Post fijado en el perfil.');
+        }
+
+        try {
+            await saveThreadToFolder(thread);
+        } catch (err) {
+            console.error('Error al guardar el fijado:', err);
+        }
+
+        const inThread = document.body.classList.contains('in-thread-view');
+        if (!inThread && currentTab === 'search') {
+            renderSearchResults(document.getElementById('searchInput').value);
+        } else if (!inThread && currentTab === 'profile') {
+            renderProfileContent();
+            if (isPinned(main)) window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+            renderAllFeed();
+        }
+    }
+
+    // Añade el símbolo "Fijado" y la opción de menú a los posts principales.
+    function decoratePost(div) {
+        const thread = findMainThread(div.dataset.id);
+        if (!thread) return;                 // respuestas: no se pueden fijar
+        const pinned = isPinned(thread.posts[0]);
+
+        const postMain = div.querySelector('.post-main');
+        const header = postMain ? postMain.querySelector('.post-header') : null;
+        if (pinned && header && !postMain.querySelector('.post-pinned-label')) {
+            const label = document.createElement('div');
+            label.className = 'post-pinned-label';
+            label.innerHTML = PIN_ICON + '<span>Fijado</span>';
+            postMain.insertBefore(label, header);
+        }
+
+        const dropdown = div.querySelector('.post-dropdown');
+        if (dropdown && !dropdown.querySelector('.post-pin-item')) {
+            const item = document.createElement('div');
+            item.className = 'post-dropdown-item post-pin-item';
+            item.innerHTML = PIN_ICON + '<span>' + (pinned ? 'Desfijar' : 'Fijar') + '</span>';
+            item.addEventListener('click', e => togglePinPost(e, item));
+            dropdown.insertBefore(item, dropdown.firstChild);
+        }
+    }
+
+    const _renderPostContentPin = renderPostContent;
+    renderPostContent = function (div, text, mArr) {
+        _renderPostContentPin(div, text, mArr);
+        decoratePost(div);
+    };
+
+    // Los posts fijados van primero (el más reciente en fijarse, arriba); el resto sigue igual.
+    const _getProfileMainThreadsPin = getProfileMainThreads;
+    getProfileMainThreads = function (pid) {
+        const list = _getProfileMainThreadsPin(pid);
+        const pinned = list
+            .filter(t => isPinned(t.posts[0]))
+            .sort((a, b) => b.posts[0].pinnedAt - a.posts[0].pinnedAt);
+        const rest = list.filter(t => !isPinned(t.posts[0]));
+        return pinned.concat(rest);
+    };
 })();

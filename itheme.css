@@ -473,3 +473,82 @@ body.pc-theme #newProfileModal .modal-header {
         border-radius: 16px 16px 0 0 !important;
     }
 }
+
+/* === PREVIEW-MULTIMEDIA-CUADRICULA: miniaturas pequeñas en cuadrícula al crear/editar post === */
+#postMediaPreview.media-preview-grid,
+body.pc-theme #postMediaPreview.media-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    grid-template-rows: none !important;
+    grid-auto-rows: auto !important;
+    gap: 6px !important;
+    width: 100% !important;
+    max-width: 280px !important;
+    height: auto !important;
+    margin: 8px 0 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+}
+
+/* Cada celda es un cuadrado */
+#postMediaPreview.media-preview-grid .media-preview-wrapper,
+body.pc-theme #postMediaPreview.media-preview-grid .media-preview-wrapper {
+    position: relative;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    min-width: 0;
+}
+
+#postMediaPreview.media-preview-grid .media-item-wrap,
+body.pc-theme #postMediaPreview.media-preview-grid .media-item-wrap {
+    width: 100% !important;
+    height: 100% !important;
+    max-height: none !important;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: none !important;
+    background-color: var(--bg-secondary);
+}
+
+#postMediaPreview.media-preview-grid .media-item,
+body.pc-theme #postMediaPreview.media-preview-grid .media-item {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    cursor: default;
+}
+
+/* Icono de vídeo más pequeño */
+#postMediaPreview.media-preview-grid .video-overlay,
+body.pc-theme #postMediaPreview.media-preview-grid .video-overlay {
+    width: 22px !important;
+    height: 22px !important;
+}
+
+#postMediaPreview.media-preview-grid .video-overlay svg,
+body.pc-theme #postMediaPreview.media-preview-grid .video-overlay svg {
+    width: 12px;
+    height: 12px;
+    margin-left: 2px;
+}
+
+/* Botón × para quitar: pequeño, en la esquina, siempre visible */
+#postMediaPreview.media-preview-grid .remove-media-btn,
+body.pc-theme #postMediaPreview.media-preview-grid .remove-media-btn {
+    top: 4px !important;
+    right: 4px !important;
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 15px !important;
+    line-height: 1;
+    background: rgba(15, 20, 25, 0.85) !important;
+    color: #ffffff !important;
+    border: 1.5px solid #ffffff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+    z-index: 5;
+}
