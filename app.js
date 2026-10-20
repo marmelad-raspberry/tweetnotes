@@ -177,10 +177,28 @@
         await writeFile(dirHandle, filename, JSON.stringify(obj, null, 2));
     }
 
+    function inferMimeFromFilename(filename) {
+        const ext = String(filename || '').split('.').pop().toLowerCase();
+        const map = {
+            mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime',
+            webm: 'video/webm', ogv: 'video/ogg', ogg: 'video/ogg',
+            mkv: 'video/x-matroska', '3gp': 'video/3gpp',
+            jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+            webp: 'image/webp', gif: 'image/gif', avif: 'image/avif'
+        };
+        return map[ext] || '';
+    }
+
     async function getMediaUrl(dirHandle, filename) {
         try {
             const fileHandle = await dirHandle.getFileHandle(filename);
             const file = await fileHandle.getFile();
+            if (!file || file.size === 0) return '';
+            const expectedMime = inferMimeFromFilename(filename);
+            if (expectedMime && (!file.type || file.type === 'application/octet-stream')) {
+                const typedBlob = file.slice(0, file.size, expectedMime);
+                return URL.createObjectURL(typedBlob);
+            }
             return URL.createObjectURL(file);
         } catch (e) { return ''; }
     }
@@ -1018,19 +1036,37 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                 let el;
                 if (m.isVideo) {
                 el = document.createElement('video');
-                el.src = fullUrl; el.controls = false; el.addEventListener('contextmenu', e => e.preventDefault()); el.addEventListener('click', function(e) { 
-            e.stopPropagation(); 
-            const newMutedState = !this.muted;
-            window.sessionVideoUnmuted = !newMutedState;
-            document.querySelectorAll('video').forEach(v => v.muted = newMutedState);
-        });
-        el.addEventListener('touchstart', function() { this.pause(); }, {passive: true});
-        el.addEventListener('touchend', function() { this.play().catch(()=>{}); }, {passive: true});
-        el.addEventListener('mousedown', function() { this.pause(); });
-        el.addEventListener('mouseup', function() { this.play().catch(()=>{}); });
+                el.playsInline = true;
+                el.setAttribute('playsinline', '');
+                el.setAttribute('webkit-playsinline', '');
+                el.loop = true;
+                el.preload = 'auto';
+                el.controls = false;
+                if (m.thumbPath && mediaCache.has(m.thumbPath)) {
+                    el.poster = mediaCache.get(m.thumbPath);
+                } else if (m.thumbnailUrl) {
+                    el.poster = m.thumbnailUrl;
+                }
+                if (fullUrl) {
+                    el.src = fullUrl;
+                    el.load();
+                }
+                el.addEventListener('loadeddata', function() {
+                    this.removeAttribute('poster');
+                }, { once: true });
+                el.addEventListener('contextmenu', e => e.preventDefault());
+                el.addEventListener('click', function(e) { 
+                    e.stopPropagation(); 
+                    const newMutedState = !this.muted;
+                    window.sessionVideoUnmuted = !newMutedState;
+                    document.querySelectorAll('video').forEach(v => v.muted = newMutedState);
+                });
+                el.addEventListener('touchstart', function() { this.pause(); }, {passive: true});
+                el.addEventListener('touchend', function() { this.play().catch(()=>{}); }, {passive: true});
+                el.addEventListener('mousedown', function() { this.pause(); });
+                el.addEventListener('mouseup', function() { this.play().catch(()=>{}); });
                 el.style.flex = '0 0 100%'; el.style.width = '100%'; el.style.maxHeight = '100vh'; el.style.objectFit = 'contain'; el.style.scrollSnapAlign = 'start'; el.style.borderRadius = '0px';
                 
-                // --- NUEVA LÓGICA: Silenciado por defecto y persistencia de sesión ---
                 el.muted = window.sessionVideoUnmuted ? false : true;
                 el.addEventListener('volumechange', function() {
                     window.sessionVideoUnmuted = !this.muted && this.volume > 0;
@@ -1302,7 +1338,9 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
             } else { threadToSave = { id: 'thread_' + Date.now(), posts: [np] }; threadsData.unshift(threadToSave); }
         }
 
-        // FIX: Desviar el re-renderizado global si acabamos de responder (mejora el rendimiento drásticamente)
+        // Guardar primero en OPFS/IndexedDB para que m.path y m.thumbPath estén listos antes de renderizar o exportar
+        if (threadToSave) await saveThreadToFolder(threadToSave);
+
         if (window._justRepliedToThreadId) {
             if (!document.body.classList.contains('in-thread-view')) {
                 const uc = document.querySelector(`.thread-container[data-thread-id="${window._justRepliedToThreadId}"]`);
@@ -1317,8 +1355,6 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
             else if (currentTab === 'profile' && !document.body.classList.contains('in-thread-view')) renderProfileContent(); 
             else renderAllFeed();
         }
-
-        if (threadToSave) await saveThreadToFolder(threadToSave);
 
         selectedMediaFiles = [];
         document.getElementById('postModal').style.display = 'none';
@@ -3301,10 +3337,54 @@ window.addEventListener('popstate', (e) => {
     const POST_FORMAT = 'tweetnote-post-v1';
     const CHUNK_SIZE = 8 * 1024 * 1024;
 
-    // ---------- Utilidades ----------
-    function extOf(name, fallback) {
+    const MIME_BY_EXT = {
+        mp4: 'video/mp4',
+        m4v: 'video/mp4',
+        mov: 'video/quicktime',
+        webm: 'video/webm',
+        ogv: 'video/ogg',
+        ogg: 'video/ogg',
+        mkv: 'video/x-matroska',
+        '3gp': 'video/3gpp',
+        jpg: 'image/jpeg',
+        jpeg: 'image/jpeg',
+        png: 'image/png',
+        webp: 'image/webp',
+        gif: 'image/gif',
+        avif: 'image/avif'
+    };
+
+    const EXT_BY_MIME = {
+        'video/mp4': 'mp4',
+        'video/quicktime': 'mov',
+        'video/webm': 'webm',
+        'video/ogg': 'ogv',
+        'video/x-matroska': 'mkv',
+        'video/3gpp': '3gp',
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'image/webp': 'webp',
+        'image/gif': 'gif',
+        'image/avif': 'avif'
+    };
+
+    function extOf(name, mimeType, isVideo) {
         const m = /\.([a-zA-Z0-9]{1,8})$/.exec(name || '');
-        return m ? m[1].toLowerCase() : fallback;
+        if (m) {
+            const ext = m[1].toLowerCase();
+            if (ext !== 'bin') return ext;
+        }
+        const cleanMime = String(mimeType || '').split(';')[0].trim().toLowerCase();
+        if (EXT_BY_MIME[cleanMime]) return EXT_BY_MIME[cleanMime];
+        return isVideo ? 'mp4' : 'jpg';
+    }
+
+    function resolveMimeType(name, rawType, isVideo) {
+        const clean = String(rawType || '').split(';')[0].trim().toLowerCase();
+        if (clean && clean !== 'application/octet-stream') return clean;
+        const ext = extOf(name, '', isVideo);
+        if (MIME_BY_EXT[ext]) return MIME_BY_EXT[ext];
+        return isVideo ? 'video/mp4' : 'image/jpeg';
     }
 
     function safeName(value, fallback) {
@@ -3345,16 +3425,17 @@ window.addEventListener('popstate', (e) => {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 120000);
+        setTimeout(() => URL.revokeObjectURL(url), 180000);
     }
 
-    // Escritura por bloques: evita cargar archivos grandes de golpe en memoria.
-    async function writeBlobIO(dirHandle, filename, blob) {
+    // Escritura por bloques verificando que el archivo final quede íntegro en OPFS
+    async function writeBlobIO(dirHandle, filename, blob, mimeType) {
         const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
         const writable = await fileHandle.createWritable();
         try {
             for (let off = 0; off < blob.size; off += CHUNK_SIZE) {
-                await writable.write(blob.slice(off, Math.min(off + CHUNK_SIZE, blob.size)));
+                const chunk = blob.slice(off, Math.min(off + CHUNK_SIZE, blob.size), mimeType || blob.type);
+                await writable.write(chunk);
             }
             await writable.close();
         } catch (err) {
@@ -3375,36 +3456,94 @@ window.addEventListener('popstate', (e) => {
         return { thread, index, post: thread.posts[index] };
     }
 
-    async function buildPostArchiveIO(posts, author, mediaDir) {
-        const files = new Map();   // nombre dentro del paquete -> Blob
+    async function buildPostArchiveIO(posts, author, mediaDir, toast) {
+        const files = new Map(); // nombre en el paquete -> { blob, type }
         let dropped = 0;
 
-        async function addFile(name, fallbackBlob) {
-            if (!name) return null;
-            if (files.has(name)) return name;
+        async function addFile(name, fallbackBlob, isVideo) {
+            if (!name && !(fallbackBlob instanceof Blob)) return null;
+            if (name && files.has(name)) return name;
+
             let blob = null;
-            try { blob = await (await mediaDir.getFileHandle(name)).getFile(); } catch (e) { blob = null; }
-            if (!blob && fallbackBlob instanceof Blob) blob = fallbackBlob;   // aún sin guardar en disco
+            if (name) {
+                try {
+                    const fh = await mediaDir.getFileHandle(name);
+                    blob = await fh.getFile();
+                } catch (e) {
+                    blob = null;
+                }
+            }
+            if ((!blob || blob.size === 0) && fallbackBlob instanceof Blob) {
+                blob = fallbackBlob;
+            }
             if (!blob || blob.size === 0) return null;
-            files.set(name, blob);
-            return name;
+
+            const finalName = name || `media_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${extOf('', blob.type, isVideo)}`;
+            const mime = resolveMimeType(finalName, blob.type, isVideo);
+            // Estabilizar una referencia tipada del Blob para que no falle el empaquetado
+            const safeBlob = blob.slice(0, blob.size, mime);
+            files.set(finalName, { blob: safeBlob, type: mime });
+            return finalName;
         }
 
         const exportedPosts = [];
-        for (const p of posts) {
+        for (let pIdx = 0; pIdx < posts.length; pIdx++) {
+            const p = posts[pIdx];
             const media = [];
             const list = Array.isArray(p.media) ? p.media : [];
+
             for (let j = 0; j < list.length; j++) {
                 const m = list[j] || {};
-                const ext = extOf(m.path || (m.file && m.file.name), m.isVideo ? 'mp4' : 'jpg');
-                const mainName = m.path || (m.file ? `unsaved_${p.id}_${j}.${ext}` : null);
-                const thumbName = m.thumbPath || (m.thumbBlob ? `unsaved_${p.id}_${j}_thumb.webp` : null);
-                const mainRef = await addFile(mainName, m.file);
-                const thumbRef = await addFile(thumbName, m.thumbBlob);
-                const path = mainRef || thumbRef;
-                if (!path) { dropped++; continue; }
-                media.push({ isVideo: !!m.isVideo, path: path, thumbPath: thumbRef || null });
+                const isVid = Boolean(m.isVideo);
+                const ext = extOf(m.path || (m.file && m.file.name), m.file && m.file.type, isVid);
+                const mainCandidate = m.path || (m.file ? `unsaved_${p.id}_${j}.${ext}` : null);
+                const thumbCandidate = m.thumbPath || (m.thumbBlob ? `unsaved_${p.id}_${j}_thumb.webp` : null);
+
+                if (toast) toast.update(`Empaquetando multimedia (${j + 1}/${list.length})…`);
+
+                const mainRef = await addFile(mainCandidate, m.file, isVid);
+                let thumbRef = await addFile(thumbCandidate, m.thumbBlob, false);
+
+                if (isVid) {
+                    // CRÍTICO: Si es un video, NUNCA usar la miniatura (.webp) como ruta del video,
+                    // ya que eso provoca pantalla negra al intentar reproducirlo en <video>.
+                    if (!mainRef) {
+                        dropped++;
+                        continue;
+                    }
+                    // Si el video no tenía miniatura guardada, la generamos al vuelo para el paquete
+                    if (!thumbRef && typeof generateThumbnail === 'function') {
+                        try {
+                            const vidEntry = files.get(mainRef);
+                            if (vidEntry && vidEntry.blob) {
+                                const genThumb = await generateThumbnail(vidEntry.blob);
+                                if (genThumb && genThumb.size > 0) {
+                                    thumbRef = await addFile(`gen_${p.id}_${j}_thumb.webp`, genThumb, false);
+                                }
+                            }
+                        } catch (_) {}
+                    }
+                    media.push({
+                        isVideo: true,
+                        path: mainRef,
+                        thumbPath: thumbRef || null,
+                        mimeType: files.get(mainRef)?.type || 'video/mp4'
+                    });
+                } else {
+                    const imgPath = mainRef || thumbRef;
+                    if (!imgPath) {
+                        dropped++;
+                        continue;
+                    }
+                    media.push({
+                        isVideo: false,
+                        path: imgPath,
+                        thumbPath: thumbRef || imgPath,
+                        mimeType: files.get(imgPath)?.type || 'image/jpeg'
+                    });
+                }
             }
+
             exportedPosts.push({
                 text: p.text || '',
                 isAdvanced: !!p.isAdvanced,
@@ -3416,10 +3555,15 @@ window.addEventListener('popstate', (e) => {
         const entries = [];
         const blobs = [];
         let offset = 0;
-        files.forEach((blob, name) => {
-            entries.push({ name: name, size: blob.size, type: blob.type || 'application/octet-stream', offset: offset });
-            blobs.push(blob);
-            offset += blob.size;
+        files.forEach((info, name) => {
+            entries.push({
+                name: name,
+                size: info.blob.size,
+                type: info.type || 'application/octet-stream',
+                offset: offset
+            });
+            blobs.push(info.blob);
+            offset += info.blob.size;
         });
 
         const manifest = {
@@ -3450,11 +3594,16 @@ window.addEventListener('popstate', (e) => {
         btn.dataset.busy = 'true';
         const toast = busyToast('Preparando exportación…');
         try {
+            // Asegurar que cualquier archivo pendiente del hilo esté sincronizado en OPFS
+            if (ctx.thread && typeof saveThreadToFolder === 'function') {
+                const hasUnsaved = ctx.thread.posts.some(p => (p.media || []).some(m => m.file || m.thumbBlob));
+                if (hasUnsaved) await saveThreadToFolder(ctx.thread);
+            }
+
             const mediaDir = await getMediaDirIO();
-            // Post principal: exporta también todas sus respuestas. Respuesta: solo esa respuesta.
             const posts = ctx.index === 0 ? ctx.thread.posts.slice() : [ctx.post];
             const author = profiles.find(pr => pr.id === ctx.post.authorId) || null;
-            const result = await buildPostArchiveIO(posts, author, mediaDir);
+            const result = await buildPostArchiveIO(posts, author, mediaDir, toast);
 
             const handle = safeName(author && author.handle ? author.handle.replace(/^@/, '') : '', 'usuario');
             const dateTag = new Date().toISOString().slice(0, 10);
@@ -3530,55 +3679,126 @@ window.addEventListener('popstate', (e) => {
 
             const batchId = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
 
-            // 1. Copiar la multimedia con nombres nuevos (evita colisiones con lo existente)
-            const fileMap = new Map();   // nombre original del paquete -> nombre nuevo en OPFS
+            // Detectar cuáles archivos están referenciados como video en el manifiesto
+            const videoFileNames = new Set();
+            manifest.posts.forEach(p => {
+                (Array.isArray(p.media) ? p.media : []).forEach(m => {
+                    if (m && m.isVideo && m.path) videoFileNames.add(m.path);
+                });
+            });
+
+            // 1. Extraer y guardar cada archivo multimedia con su extensión y MIME type reales
+            const fileMap = new Map(); // nombre original -> { newName, blob, mime }
             const filesList = Array.isArray(manifest.files) ? manifest.files : [];
+
             for (let i = 0; i < filesList.length; i++) {
                 const f = filesList[i];
                 if (!f || !f.name || !(f.size > 0)) continue;
+
                 const start = dataStart + (f.offset || 0);
                 const end = start + f.size;
-                if (end > file.size) continue;
-
-                const newName = `imp_${batchId}_${i}.${extOf(f.name, 'bin')}`;
-                await writeBlobIO(mediaDir, newName, file.slice(start, end, f.type || 'application/octet-stream'));
-                fileMap.set(f.name, newName);
-
-                if (i % 5 === 0) {
-                    toast.update(`Importando multimedia… ${Math.round(((i + 1) / filesList.length) * 100)}%`);
-                    await new Promise(r => setTimeout(r, 0));
+                if (start < dataStart || end > file.size) {
+                    console.warn('Archivo truncado en el paquete .tnpost:', f.name);
+                    continue;
                 }
+
+                const isVidFile = videoFileNames.has(f.name);
+                const ext = extOf(f.name, f.type, isVidFile);
+                const mime = resolveMimeType(f.name, f.type, isVidFile);
+                const newName = `imp_${batchId}_${i}.${ext}`;
+                const sliceBlob = file.slice(start, end, mime);
+
+                await writeBlobIO(mediaDir, newName, sliceBlob, mime);
+                fileMap.set(f.name, { newName: newName, blob: sliceBlob, mime: mime });
+
+                toast.update(`Importando multimedia… ${Math.round(((i + 1) / filesList.length) * 100)}%`);
+                await new Promise(r => setTimeout(r, 0));
             }
 
-            // 2. Construir el hilo: el post y sus respuestas, publicados por el perfil activo
+            // 2. Construir el hilo asegurando que los videos tengan su archivo de video y su miniatura separada
             const replyTotal = manifest.posts.length - 1;
             let dropped = 0;
             const baseTime = Date.now();
-            const newPosts = manifest.posts.map((p, pIdx) => {
+            const newPosts = [];
+
+            for (let pIdx = 0; pIdx < manifest.posts.length; pIdx++) {
+                const p = manifest.posts[pIdx];
                 const media = [];
-                (Array.isArray(p.media) ? p.media : []).forEach(m => {
-                    const mainRef = m.path ? fileMap.get(m.path) : null;
-                    const thumbRef = m.thumbPath ? fileMap.get(m.thumbPath) : null;
-                    const path = mainRef || thumbRef;
-                    if (!path) { dropped++; return; }
-                    const obj = { isVideo: !!m.isVideo, path: path };
-                    if (thumbRef) obj.thumbPath = thumbRef;
-                    media.push(obj);
-                });
-                return {
+                const mList = Array.isArray(p.media) ? p.media : [];
+
+                for (let mIdx = 0; mIdx < mList.length; mIdx++) {
+                    const m = mList[mIdx] || {};
+                    const isVid = Boolean(m.isVideo);
+                    const mainEntry = m.path ? fileMap.get(m.path) : null;
+                    let thumbEntry = m.thumbPath ? fileMap.get(m.thumbPath) : null;
+
+                    if (isVid) {
+                        // Nunca permitir que un video apunte a una imagen/miniatura o a un archivo inexistente
+                        const isThumbImage = mainEntry && /\.(webp|jpg|jpeg|png|gif|avif)$/i.test(mainEntry.newName);
+                        if (!mainEntry || isThumbImage) {
+                            dropped++;
+                            continue;
+                        }
+
+                        let thumbPath = thumbEntry ? thumbEntry.newName : null;
+
+                        // Si el video no trajo miniatura (o apuntaba al propio video), generarla automáticamente
+                        if ((!thumbPath || thumbPath === mainEntry.newName) && typeof generateThumbnail === 'function') {
+                            try {
+                                toast.update('Generando miniatura de video…');
+                                const genBlob = await generateThumbnail(mainEntry.blob);
+                                if (genBlob && genBlob.size > 0) {
+                                    const genThumbName = `imp_${batchId}_${pIdx}_${mIdx}_thumb.webp`;
+                                    await writeBlobIO(mediaDir, genThumbName, genBlob, 'image/webp');
+                                    thumbPath = genThumbName;
+                                    mediaCache.set(genThumbName, URL.createObjectURL(genBlob));
+                                }
+                            } catch (_) {}
+                        } else if (thumbEntry && thumbEntry.blob) {
+                            mediaCache.set(thumbEntry.newName, URL.createObjectURL(thumbEntry.blob));
+                        }
+
+                        const videoObj = {
+                            isVideo: true,
+                            path: mainEntry.newName
+                        };
+                        if (thumbPath) videoObj.thumbPath = thumbPath;
+                        media.push(videoObj);
+                    } else {
+                        const imgEntry = mainEntry || thumbEntry;
+                        if (!imgEntry) {
+                            dropped++;
+                            continue;
+                        }
+                        const thumbPath = thumbEntry ? thumbEntry.newName : imgEntry.newName;
+                        if (imgEntry.blob) {
+                            mediaCache.set(imgEntry.newName, URL.createObjectURL(imgEntry.blob));
+                        }
+                        if (thumbEntry && thumbEntry.blob && thumbEntry.newName !== imgEntry.newName) {
+                            mediaCache.set(thumbEntry.newName, URL.createObjectURL(thumbEntry.blob));
+                        }
+                        media.push({
+                            isVideo: false,
+                            path: imgEntry.newName,
+                            thumbPath: thumbPath
+                        });
+                    }
+                }
+
+                newPosts.push({
                     id: `post_${batchId}_${pIdx}`,
                     text: p.text || '',
                     authorId: targetProfile.id,
                     isAdvanced: !!p.isAdvanced,
                     replyCount: pIdx === 0 ? replyTotal : 0,
-                    createdAt: new Date(baseTime + pIdx).toISOString(),
+                    createdAt: p.createdAt || new Date(baseTime + pIdx).toISOString(),
                     media: media
-                };
-            });
+                });
+            }
 
             const thread = { id: `thread_${batchId}`, posts: newPosts };
 
-            // 3. Guardar y mostrar
+            // 3. Guardar en IndexedDB/OPFS y actualizar vista
             threadsData.unshift(thread);
             await saveThreadToFolder(thread);
 
@@ -3592,9 +3812,9 @@ window.addEventListener('popstate', (e) => {
                 window.scrollTo({ top: 0 });
             }
 
-            toast.done(`Post importado${replyTotal > 0 ? ` con ${replyTotal} ${replyTotal === 1 ? 'respuesta' : 'respuestas'}` : ''}.`);
+            toast.done(`Post importado${replyTotal > 0 ? ` con ${replyTotal}${replyTotal === 1 ? 'respuesta' : 'respuestas'}` : ''}.`);
             if (dropped > 0) {
-                alert(`Algunos archivos multimedia no estaban en el paquete y se omitieron (${dropped}).`);
+                alert(`Algunos archivos multimedia estaban dañados o incompletos en el paquete y se omitieron (${dropped}).`);
             }
         } catch (err) {
             toast.close();
@@ -3622,7 +3842,6 @@ window.addEventListener('popstate', (e) => {
         if (b) b.style.display = '';
     };
 })();
-
 
 // === INYECCIÓN: MOVER POST (Y SUS RESPUESTAS) A OTRO PERFIL ===
 (function () {
