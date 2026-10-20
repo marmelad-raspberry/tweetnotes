@@ -302,6 +302,26 @@ async function saveProfileToFolder(profile) {
         delete profile.coverFile;
     }
 
+    if (profile.avatarOriginalFile) {
+        const origExt = (profile.avatarOriginalFile.name && profile.avatarOriginalFile.name.includes('.'))
+            ? profile.avatarOriginalFile.name.split('.').pop()
+            : 'png';
+        const origFilename = `${profile.id}_avatar_orig.${origExt}`;
+        await writeFile(mediaDir, origFilename, profile.avatarOriginalFile);
+        profile.avatarOriginalPath = origFilename;
+        delete profile.avatarOriginalFile;
+    }
+
+    if (profile.coverOriginalFile) {
+        const origExt = (profile.coverOriginalFile.name && profile.coverOriginalFile.name.includes('.'))
+            ? profile.coverOriginalFile.name.split('.').pop()
+            : 'png';
+        const origFilename = `${profile.id}_cover_orig.${origExt}`;
+        await writeFile(mediaDir, origFilename, profile.coverOriginalFile);
+        profile.coverOriginalPath = origFilename;
+        delete profile.coverOriginalFile;
+    }
+
     delete profile.avatar;
     delete profile.cover;
     delete profile.avatarThumb;
@@ -679,8 +699,8 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
 
         const avFile = document.getElementById('newProfilePic').files[0];
         const covFile = document.getElementById('newCoverPic').files[0];
-        if (avFile) { np.avatarFile = avFile; np.avatar = URL.createObjectURL(avFile); np.avatarThumb = URL.createObjectURL(await generateThumbnail(avFile, 256)); np.avatarFeedThumb = URL.createObjectURL(await generateThumbnail(avFile, 128)); }
-        if (covFile) { np.coverFile = covFile; np.cover = URL.createObjectURL(covFile); np.coverThumb = URL.createObjectURL(await generateThumbnail(covFile, 1200)); }
+        if (avFile) { np.avatarFile = avFile; np.avatarOriginalFile = takeCropOriginal(document.getElementById('newProfilePic'), avFile); np.avatar = URL.createObjectURL(avFile); np.avatarThumb = URL.createObjectURL(await generateThumbnail(avFile, 256)); np.avatarFeedThumb = URL.createObjectURL(await generateThumbnail(avFile, 128)); }
+        if (covFile) { np.coverFile = covFile; np.coverOriginalFile = takeCropOriginal(document.getElementById('newCoverPic'), covFile); np.cover = URL.createObjectURL(covFile); np.coverThumb = URL.createObjectURL(await generateThumbnail(covFile, 1200)); }
 
         profiles.push(np); activeProfileId = np.id; composerProfileId = np.id; setComposerProfile(np.id); renderComposerProfileOptions(np.id);
         await saveProfileToFolder(np);
@@ -699,6 +719,14 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         activeProfileId = p.id; composerProfileId = p.id; setComposerProfile(p.id); renderComposerProfileOptions(p.id); await saveSettingsToFolder();  document.getElementById('profileDropdown').style.display = 'none'; renderCurrentProfileUI(); switchTab('profile'); window.scrollTo(0, 0);
     }
 
+    function originalMediaOf(p, kind) {
+        // Foto sin recortar para el visor a pantalla completa; si no existe, usa la versión guardada
+        const path = p[kind + 'OriginalPath'] || p[kind + 'Path'];
+        const file = p[kind + 'OriginalFile'] || p[kind + 'File'];
+        if (!path && !file) return null;
+        return { path: path, file: file, thumbnailUrl: p[kind + 'ThumbPath'] || p[kind + 'Thumb'] || path };
+    }
+
     function renderCurrentProfileUI() {
         const p = profiles.find(x => x.id === activeProfileId) || profiles[0]; if (!p) return;
         document.getElementById('displayName').innerText = p.name; document.getElementById('displayHandle').innerText = p.handle;
@@ -706,14 +734,14 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         const picEl = document.getElementById('profilePic');
         setMediaElement(picEl, p.avatarThumb || p.avatarThumbPath || p.avatar || p.avatarPath);
         picEl.style.cursor = 'pointer';
-        picEl.onclick = () => { if(p.avatarPath || p.avatar) openFullViewer([{ path: p.avatarPath, file: p.avatarFile, thumbnailUrl: p.avatarThumbPath || p.avatarThumb || p.avatarPath }], 0); };
+        picEl.onclick = () => { const orig = originalMediaOf(p, 'avatar'); if (orig) openFullViewer([orig], 0); };
 
         setMediaElement(document.getElementById('modalComposeAvatar'), p.avatarThumb || p.avatarThumbPath || p.avatar || p.avatarPath);
 
         const coverEl = document.getElementById('coverPhoto');
         setMediaElement(coverEl, p.coverThumb || p.coverThumbPath || p.cover || p.coverPath);
         coverEl.style.cursor = 'pointer';
-        coverEl.onclick = () => { if(p.coverPath || p.cover) openFullViewer([{ path: p.coverPath, file: p.coverFile, thumbnailUrl: p.coverThumbPath || p.coverThumb || p.coverPath }], 0); };
+        coverEl.onclick = () => { const orig = originalMediaOf(p, 'cover'); if (orig) openFullViewer([orig], 0); };
     }
 
     function getMainPost(t) { return t.posts?.length ? t.posts[0] : null; }
@@ -887,7 +915,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
             threadsData = threadsToSave;
             
             const dp = profiles.find(p => p.id === dId);
-            if(dp) { if(dp.avatarPath) await deleteMediaFile(dp.avatarPath); if(dp.avatarThumbPath) await deleteMediaFile(dp.avatarThumbPath); if(dp.avatarFeedThumbPath) await deleteMediaFile(dp.avatarFeedThumbPath); if(dp.coverPath) await deleteMediaFile(dp.coverPath); if(dp.coverThumbPath) await deleteMediaFile(dp.coverThumbPath); }
+            if(dp) { if(dp.avatarPath) await deleteMediaFile(dp.avatarPath); if(dp.avatarThumbPath) await deleteMediaFile(dp.avatarThumbPath); if(dp.avatarFeedThumbPath) await deleteMediaFile(dp.avatarFeedThumbPath); if(dp.coverPath) await deleteMediaFile(dp.coverPath); if(dp.coverThumbPath) await deleteMediaFile(dp.coverThumbPath); if(dp.avatarOriginalPath) await deleteMediaFile(dp.avatarOriginalPath); if(dp.coverOriginalPath) await deleteMediaFile(dp.coverOriginalPath); }
             profiles = profiles.filter(p => p.id !== dId);
             await deleteProfileFromFolder(dId);
             
@@ -1072,8 +1100,8 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         const pi = document.getElementById('editProfilePic'); const ci = document.getElementById('editCoverPic');
         const p = profiles.find(x => x.id === activeProfileId);
         if (nn) p.name = nn; if (nh) p.handle = formatUniqueHandle(nh, p.id); p.bio = nb;
-        if (pi.files[0]) { if(p.avatarPath) await deleteMediaFile(p.avatarPath); if(p.avatarThumbPath) await deleteMediaFile(p.avatarThumbPath); if(p.avatarFeedThumbPath) await deleteMediaFile(p.avatarFeedThumbPath); p.avatarFile = pi.files[0]; p.avatar = URL.createObjectURL(pi.files[0]); p.avatarThumb = URL.createObjectURL(await generateThumbnail(pi.files[0], 256)); p.avatarFeedThumb = URL.createObjectURL(await generateThumbnail(pi.files[0], 128)); }
-        if (ci.files[0]) { if(p.coverPath) await deleteMediaFile(p.coverPath); if(p.coverThumbPath) await deleteMediaFile(p.coverThumbPath); p.coverFile = ci.files[0]; p.cover = URL.createObjectURL(ci.files[0]); p.coverThumb = URL.createObjectURL(await generateThumbnail(ci.files[0], 1200)); }
+        if (pi.files[0]) { if(p.avatarPath) await deleteMediaFile(p.avatarPath); if(p.avatarThumbPath) await deleteMediaFile(p.avatarThumbPath); if(p.avatarFeedThumbPath) await deleteMediaFile(p.avatarFeedThumbPath); if(p.avatarOriginalPath) await deleteMediaFile(p.avatarOriginalPath); delete p.avatarOriginalPath; p.avatarOriginalFile = takeCropOriginal(pi, pi.files[0]); p.avatarFile = pi.files[0]; p.avatar = URL.createObjectURL(pi.files[0]); p.avatarThumb = URL.createObjectURL(await generateThumbnail(pi.files[0], 256)); p.avatarFeedThumb = URL.createObjectURL(await generateThumbnail(pi.files[0], 128)); }
+        if (ci.files[0]) { if(p.coverPath) await deleteMediaFile(p.coverPath); if(p.coverThumbPath) await deleteMediaFile(p.coverThumbPath); if(p.coverOriginalPath) await deleteMediaFile(p.coverOriginalPath); delete p.coverOriginalPath; p.coverOriginalFile = takeCropOriginal(ci, ci.files[0]); p.coverFile = ci.files[0]; p.cover = URL.createObjectURL(ci.files[0]); p.coverThumb = URL.createObjectURL(await generateThumbnail(ci.files[0], 1200)); }
         await saveProfileToFolder(p); setComposerProfile(composerProfileId); renderComposerProfileOptions(composerProfileId); renderCurrentProfileUI(); if (currentTab === 'profile') renderProfileContent(); else renderAllFeed();
         pi.value = ''; ci.value = ''; closeEditModal();
     }
@@ -2318,13 +2346,13 @@ window.addEventListener('popstate', (e) => {
                 if (profile.avatarPath) await deleteMediaFile(profile.avatarPath);
                 if (profile.avatarThumbPath) await deleteMediaFile(profile.avatarThumbPath);
                 if (profile.avatarFeedThumbPath) await deleteMediaFile(profile.avatarFeedThumbPath);
-                profile.avatarFile = editProfilePic.files[0];
+                if (profile.avatarOriginalPath) await deleteMediaFile(profile.avatarOriginalPath); delete profile.avatarOriginalPath; profile.avatarOriginalFile = takeCropOriginal(editProfilePic, editProfilePic.files[0]); profile.avatarFile = editProfilePic.files[0];
                 editProfilePic.value = '';
             }
             if (editCoverPic && editCoverPic.files && editCoverPic.files[0]) {
                 if (profile.coverPath) await deleteMediaFile(profile.coverPath);
                 if (profile.coverThumbPath) await deleteMediaFile(profile.coverThumbPath);
-                profile.coverFile = editCoverPic.files[0];
+                if (profile.coverOriginalPath) await deleteMediaFile(profile.coverOriginalPath); delete profile.coverOriginalPath; profile.coverOriginalFile = takeCropOriginal(editCoverPic, editCoverPic.files[0]); profile.coverFile = editCoverPic.files[0];
                 editCoverPic.value = '';
             }
         }
@@ -2335,7 +2363,7 @@ window.addEventListener('popstate', (e) => {
         }
 
         // 2. Recuperar rutas desde IndexedDB si faltan en el objeto en memoria
-        if (!profile.avatarPath || !profile.coverPath) {
+        if (!profile.avatarPath || !profile.coverPath || !profile.avatarOriginalPath || !profile.coverOriginalPath) {
             try {
                 const db = await openFolderDatabase();
                 const storedProfile = await new Promise((resolve) => {
@@ -2346,7 +2374,7 @@ window.addEventListener('popstate', (e) => {
                 });
                 db.close();
                 if (storedProfile) {
-                    ['avatarPath', 'avatarThumbPath', 'avatarFeedThumbPath', 'coverPath', 'coverThumbPath'].forEach(k => {
+                    ['avatarPath', 'avatarThumbPath', 'avatarFeedThumbPath', 'coverPath', 'coverThumbPath', 'avatarOriginalPath', 'coverOriginalPath'].forEach(k => {
                         if (!profile[k] && storedProfile[k]) profile[k] = storedProfile[k];
                     });
                 }
@@ -2354,7 +2382,7 @@ window.addEventListener('popstate', (e) => {
         }
 
         // 3. Buscar en OPFS por prefijo de ID si aún no están enlazadas las rutas de avatar/portada
-        if (mediaDir && (!profile.avatarPath || !profile.coverPath)) {
+        if (mediaDir && (!profile.avatarPath || !profile.coverPath || !profile.avatarOriginalPath || !profile.coverOriginalPath)) {
             try {
                 for await (const [name, handle] of mediaDir.entries()) {
                     if (handle.kind !== 'file') continue;
@@ -2362,10 +2390,14 @@ window.addEventListener('popstate', (e) => {
                         profile.avatarThumbPath = profile.avatarThumbPath || name;
                     } else if (name === `${profile.id}_avatar_feed_thumb.webp`) {
                         profile.avatarFeedThumbPath = profile.avatarFeedThumbPath || name;
+                    } else if (name.startsWith(`${profile.id}_avatar_orig.`)) {
+                        profile.avatarOriginalPath = profile.avatarOriginalPath || name;
                     } else if (name.startsWith(`${profile.id}_avatar.`)) {
                         profile.avatarPath = profile.avatarPath || name;
                     } else if (name === `${profile.id}_cover_thumb.webp`) {
                         profile.coverThumbPath = profile.coverThumbPath || name;
+                    } else if (name.startsWith(`${profile.id}_cover_orig.`)) {
+                        profile.coverOriginalPath = profile.coverOriginalPath || name;
                     } else if (name.startsWith(`${profile.id}_cover.`)) {
                         profile.coverPath = profile.coverPath || name;
                     }
@@ -2406,6 +2438,8 @@ window.addEventListener('popstate', (e) => {
             const avatarFeedThumbPath = (await validPath(profile.avatarFeedThumbPath)) || avatarThumbPath || avatarPath;
             const coverPath = await validPath(profile.coverPath);
             const coverThumbPath = (await validPath(profile.coverThumbPath)) || coverPath;
+            const avatarOriginalPath = await validPath(profile.avatarOriginalPath);
+            const coverOriginalPath = await validPath(profile.coverOriginalPath);
 
             // 1. Limpiar metadatos del perfil
             const cleanProfile = {
@@ -2417,7 +2451,9 @@ window.addEventListener('popstate', (e) => {
                 avatarThumbPath: avatarThumbPath || null,
                 avatarFeedThumbPath: avatarFeedThumbPath || null,
                 coverPath: coverPath || coverThumbPath || null,
-                coverThumbPath: coverThumbPath || null
+                coverThumbPath: coverThumbPath || null,
+                avatarOriginalPath: avatarOriginalPath || null,
+                coverOriginalPath: coverOriginalPath || null
             };
 
             // 2. Recolectar todos los hilos y posts pertenecientes al perfil
@@ -2429,7 +2465,9 @@ window.addEventListener('popstate', (e) => {
                 cleanProfile.avatarThumbPath,
                 cleanProfile.avatarFeedThumbPath,
                 cleanProfile.coverPath,
-                cleanProfile.coverThumbPath
+                cleanProfile.coverThumbPath,
+                cleanProfile.avatarOriginalPath,
+                cleanProfile.coverOriginalPath
             ].forEach(path => {
                 if (path) mediaNamesSet.add(path);
             });
@@ -2666,6 +2704,12 @@ window.addEventListener('popstate', (e) => {
                 finalProfile.coverPath = mappedCover || mappedCoverThumb;
                 finalProfile.coverThumbPath = mappedCoverThumb || mappedCover;
             }
+
+            // Originales sin recorte (visor a pantalla completa). Perfiles antiguos no los traen.
+            const mappedAvatarOrig = remapPath(impProf.avatarOriginalPath);
+            if (mappedAvatarOrig) finalProfile.avatarOriginalPath = mappedAvatarOrig;
+            const mappedCoverOrig = remapPath(impProf.coverOriginalPath);
+            if (mappedCoverOrig) finalProfile.coverOriginalPath = mappedCoverOrig;
 
             // Precargar fotos de perfil y portada en mediaCache para renderizado inmediato
             await preloadProfileMediaToCache(mediaDir, finalProfile);
@@ -3879,6 +3923,17 @@ window.addEventListener('popstate', (e) => {
     const $ = id => document.getElementById(id);
     const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+    // Original sin recortar de cada input: { cropped, original }. Se consume al guardar.
+    const cropOriginals = new Map();
+    const sameFile = (a, b) => !!a && !!b && (a === b || (a.name === b.name && a.size === b.size && a.lastModified === b.lastModified));
+    window.takeCropOriginal = function (input, croppedFile) {
+        if (!input || !croppedFile) return null;
+        const entry = cropOriginals.get(input.id);
+        if (!entry || !sameFile(entry.cropped, croppedFile)) return null;
+        cropOriginals.delete(input.id);
+        return entry.original;
+    };
+
     let session = null;          // recorte en curso (null si la ventana está cerrada)
     const pointers = new Map();  // dedos/punteros activos -> posición en el escenario
     let lastPinch = null;
@@ -4052,7 +4107,7 @@ window.addEventListener('popstate', (e) => {
         $('cropModal').style.display = 'none';
         $('cropImg').removeAttribute('src');
         URL.revokeObjectURL(s.url);
-        if (cancelled) s.input.value = '';
+        if (cancelled) { s.input.value = ''; cropOriginals.delete(s.input.id); }
         if (!fromHistory && history.state && history.state.view === 'cropModal') history.back();
     }
 
@@ -4090,6 +4145,7 @@ window.addEventListener('popstate', (e) => {
             const dt = new DataTransfer();
             dt.items.add(cropped);
             s.input.files = dt.files;
+            cropOriginals.set(s.input.id, { cropped: cropped, original: s.file });
 
             closeCropper({ cancelled: false, fromHistory: false });
         } catch (err) {
