@@ -290,7 +290,7 @@ async function saveProfileToFolder(profile) {
         await writeFile(mediaDir, filename, profile.coverFile);
         profile.coverPath = filename;
 
-        const thumbBlobCov = await generateThumbnail(profile.coverFile, 600);
+        const thumbBlobCov = await generateThumbnail(profile.coverFile, 1200);
         const covThumbData = (thumbBlobCov && thumbBlobCov.size > 0) ? thumbBlobCov : profile.coverFile;
         const thumbFileCov = `${profile.id}_cover_thumb.webp`;
         await writeFile(mediaDir, thumbFileCov, covThumbData);
@@ -680,7 +680,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         const avFile = document.getElementById('newProfilePic').files[0];
         const covFile = document.getElementById('newCoverPic').files[0];
         if (avFile) { np.avatarFile = avFile; np.avatar = URL.createObjectURL(avFile); np.avatarThumb = URL.createObjectURL(await generateThumbnail(avFile, 256)); np.avatarFeedThumb = URL.createObjectURL(await generateThumbnail(avFile, 128)); }
-        if (covFile) { np.coverFile = covFile; np.cover = URL.createObjectURL(covFile); np.coverThumb = URL.createObjectURL(await generateThumbnail(covFile, 600)); }
+        if (covFile) { np.coverFile = covFile; np.cover = URL.createObjectURL(covFile); np.coverThumb = URL.createObjectURL(await generateThumbnail(covFile, 1200)); }
 
         profiles.push(np); activeProfileId = np.id; composerProfileId = np.id; setComposerProfile(np.id); renderComposerProfileOptions(np.id);
         await saveProfileToFolder(np);
@@ -1073,7 +1073,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         const p = profiles.find(x => x.id === activeProfileId);
         if (nn) p.name = nn; if (nh) p.handle = formatUniqueHandle(nh, p.id); p.bio = nb;
         if (pi.files[0]) { if(p.avatarPath) await deleteMediaFile(p.avatarPath); if(p.avatarThumbPath) await deleteMediaFile(p.avatarThumbPath); if(p.avatarFeedThumbPath) await deleteMediaFile(p.avatarFeedThumbPath); p.avatarFile = pi.files[0]; p.avatar = URL.createObjectURL(pi.files[0]); p.avatarThumb = URL.createObjectURL(await generateThumbnail(pi.files[0], 256)); p.avatarFeedThumb = URL.createObjectURL(await generateThumbnail(pi.files[0], 128)); }
-        if (ci.files[0]) { if(p.coverPath) await deleteMediaFile(p.coverPath); if(p.coverThumbPath) await deleteMediaFile(p.coverThumbPath); p.coverFile = ci.files[0]; p.cover = URL.createObjectURL(ci.files[0]); p.coverThumb = URL.createObjectURL(await generateThumbnail(ci.files[0], 600)); }
+        if (ci.files[0]) { if(p.coverPath) await deleteMediaFile(p.coverPath); if(p.coverThumbPath) await deleteMediaFile(p.coverThumbPath); p.coverFile = ci.files[0]; p.cover = URL.createObjectURL(ci.files[0]); p.coverThumb = URL.createObjectURL(await generateThumbnail(ci.files[0], 1200)); }
         await saveProfileToFolder(p); setComposerProfile(composerProfileId); renderComposerProfileOptions(composerProfileId); renderCurrentProfileUI(); if (currentTab === 'profile') renderProfileContent(); else renderAllFeed();
         pi.value = ''; ci.value = ''; closeEditModal();
     }
@@ -3854,4 +3854,286 @@ window.addEventListener('popstate', (e) => {
         const rest = list.filter(t => !isPinned(t.posts[0]));
         return pinned.concat(rest);
     };
+})();
+
+/* === RECORTE-PERFIL-PORTADA: ventana de recorte (perfil 1:1, portada según se ve en el perfil) === */
+(function () {
+    const ASPECT = { avatar: 1 };                            // proporción ancho:alto del perfil
+    const COVER_ASPECT_MIN = 1;                              // límites de seguridad para la portada
+    const COVER_ASPECT_MAX = 8;
+    const COVER_FALLBACK_HEIGHT = 200;                       // alto de .cover-photo en style.css
+
+    // Proporción ancho:alto con la que se ve la portada en el perfil
+    function coverAspect() {
+        const cover = document.getElementById('coverPhoto');
+        const container = document.querySelector('.container');
+        // Si la portada está oculta (otra pestaña), se usa el ancho del contenedor
+        const w = (cover && cover.clientWidth) || (container ? container.clientWidth : window.innerWidth);
+        const h = parseFloat(cover ? getComputedStyle(cover).height : '') || COVER_FALLBACK_HEIGHT;
+        return Math.min(COVER_ASPECT_MAX, Math.max(COVER_ASPECT_MIN, w / h));
+    }
+    const MAX_OUTPUT_WIDTH = { avatar: 1024, cover: 2400 };  // ancho máximo del archivo recortado
+    const MAX_ZOOM = 5;                                      // zoom máximo sobre el encuadre mínimo
+    const FRAME_MARGIN = 24;                                 // margen del encuadre dentro del escenario
+
+    const $ = id => document.getElementById(id);
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+    let session = null;          // recorte en curso (null si la ventana está cerrada)
+    const pointers = new Map();  // dedos/punteros activos -> posición en el escenario
+    let lastPinch = null;
+
+    function loadImage(file) {
+        return new Promise((resolve, reject) => {
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = () => resolve({ img, url });
+            img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen.')); };
+            img.src = url;
+        });
+    }
+
+    function stagePoint(e) {
+        const r = $('cropStage').getBoundingClientRect();
+        return { x: e.clientX - r.left, y: e.clientY - r.top };
+    }
+
+    // Encuadre fijo, centrado en el escenario y con la proporción pedida.
+    function layoutFrame() {
+        const s = session;
+        const stage = $('cropStage');
+        const sw = stage.clientWidth, sh = stage.clientHeight;
+        const W = Math.max(1, Math.min(sw - FRAME_MARGIN * 2, (sh - FRAME_MARGIN * 2) * s.ar));
+        const H = W / s.ar;
+        Object.assign(s, { W, H, fx: (sw - W) / 2, fy: (sh - H) / 2 });
+        const frame = $('cropFrame');
+        frame.style.width = W + 'px';
+        frame.style.height = H + 'px';
+        frame.style.left = s.fx + 'px';
+        frame.style.top = s.fy + 'px';
+    }
+
+    // Restablece la imagen: cubre el encuadre y queda centrada.
+    function fitImage() {
+        if (!session) return;
+        layoutFrame();
+        const s = session;
+        s.minK = Math.max(s.W / s.nw, s.H / s.nh);
+        s.k = s.minK;
+        s.left = s.fx - (s.nw * s.k - s.W) / 2;
+        s.top = s.fy - (s.nh * s.k - s.H) / 2;
+        clampPos();
+        applyTransform();
+    }
+
+    // Impide que la imagen deje huecos dentro del encuadre.
+    function clampPos() {
+        const s = session;
+        const w = s.nw * s.k, h = s.nh * s.k;
+        s.left = clamp(s.left, s.fx + s.W - w, s.fx);
+        s.top = clamp(s.top, s.fy + s.H - h, s.fy);
+    }
+
+    function applyTransform() {
+        const s = session;
+        $('cropImg').style.transform = `translate(${s.left}px, ${s.top}px) scale(${s.k})`;
+    }
+
+    function zoomAround(cx, cy, factor) {
+        const s = session;
+        const k = clamp(s.k * factor, s.minK, s.minK * MAX_ZOOM);
+        const r = k / s.k;
+        s.left = cx - (cx - s.left) * r;
+        s.top = cy - (cy - s.top) * r;
+        s.k = k;
+        clampPos();
+        applyTransform();
+    }
+
+    // ---- Gestos: arrastrar (1 dedo), pellizcar (2 dedos) y rueda del ratón ----
+    function onPointerDown(e) {
+        if (!session) return;
+        e.preventDefault();
+        $('cropStage').setPointerCapture(e.pointerId);
+        pointers.set(e.pointerId, stagePoint(e));
+        lastPinch = null;
+    }
+
+    function onPointerMove(e) {
+        if (!session || !pointers.has(e.pointerId)) return;
+        const prev = pointers.get(e.pointerId);
+        const cur = stagePoint(e);
+        pointers.set(e.pointerId, cur);
+        const s = session;
+
+        if (pointers.size === 1) {
+            s.left += cur.x - prev.x;
+            s.top += cur.y - prev.y;
+            clampPos();
+            applyTransform();
+        } else if (pointers.size === 2) {
+            const [a, b] = Array.from(pointers.values());
+            const dist = Math.hypot(a.x - b.x, a.y - b.y);
+            const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+            if (lastPinch && lastPinch.dist > 0) {
+                zoomAround(lastPinch.mid.x, lastPinch.mid.y, dist / lastPinch.dist);
+                s.left += mid.x - lastPinch.mid.x;
+                s.top += mid.y - lastPinch.mid.y;
+                clampPos();
+                applyTransform();
+            }
+            lastPinch = { dist, mid };
+        }
+    }
+
+    function onPointerUp(e) {
+        pointers.delete(e.pointerId);
+        lastPinch = null;
+    }
+
+    function onWheel(e) {
+        if (!session) return;
+        e.preventDefault();
+        const p = stagePoint(e);
+        zoomAround(p.x, p.y, Math.exp(-e.deltaY * 0.002));
+    }
+
+    // ---- Apertura, cierre y confirmación ----
+    async function openCropper(input, kind) {
+        if (session) return;
+        const file = input.files && input.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            alert('Selecciona una imagen.');
+            input.value = '';
+            return;
+        }
+
+        let loaded;
+        try {
+            loaded = await loadImage(file);
+        } catch (err) {
+            alert(err.message);
+            input.value = '';
+            return;
+        }
+
+        session = {
+            kind,
+            ar: kind === 'cover' ? coverAspect() : ASPECT[kind],
+            input,
+            file,
+            url: loaded.url,
+            image: loaded.img,
+            nw: loaded.img.naturalWidth,
+            nh: loaded.img.naturalHeight
+        };
+
+        const modal = $('cropModal');
+        $('cropTitle').textContent = kind === 'avatar' ? 'Recortar foto de perfil' : 'Recortar portada';
+        modal.classList.toggle('is-avatar', kind === 'avatar');
+
+        const stageImg = $('cropImg');
+        stageImg.src = loaded.url;
+        stageImg.style.width = session.nw + 'px';
+        stageImg.style.height = session.nh + 'px';
+
+        modal.style.display = 'flex';
+        history.pushState({ view: 'cropModal' }, '');
+        fitImage();
+    }
+
+    function closeCropper({ cancelled = false, fromHistory = false } = {}) {
+        const s = session;
+        if (!s) return;
+        session = null;
+        pointers.clear();
+        lastPinch = null;
+        $('cropModal').style.display = 'none';
+        $('cropImg').removeAttribute('src');
+        URL.revokeObjectURL(s.url);
+        if (cancelled) s.input.value = '';
+        if (!fromHistory && history.state && history.state.view === 'cropModal') history.back();
+    }
+
+    async function confirmCrop() {
+        const s = session;
+        if (!s) return;
+        const btn = $('cropConfirmBtn');
+        btn.disabled = true;
+        try {
+            // Zona visible del encuadre expresada en píxeles de la imagen original
+            const sx = (s.fx - s.left) / s.k;
+            const sy = (s.fy - s.top) / s.k;
+            const sw = s.W / s.k;
+            const sh = s.H / s.k;
+
+            const outW = Math.max(1, Math.min(Math.round(sw), MAX_OUTPUT_WIDTH[s.kind]));
+            const outH = Math.max(1, Math.round(outW / s.ar));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = outW;
+            canvas.height = outH;
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(s.image, sx, sy, sw, sh, 0, 0, outW, outH);
+
+            const mime = s.file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+            const blob = await new Promise(res => canvas.toBlob(res, mime, 0.92));
+            if (!blob) throw new Error('No se pudo generar la imagen recortada.');
+
+            const ext = mime === 'image/png' ? 'png' : 'jpg';
+            const cropped = new File([blob], `${s.kind}_recorte.${ext}`, { type: mime, lastModified: Date.now() });
+
+            // Sustituye el archivo del input para que el código existente lo lea sin cambios
+            const dt = new DataTransfer();
+            dt.items.add(cropped);
+            s.input.files = dt.files;
+
+            closeCropper({ cancelled: false, fromHistory: false });
+        } catch (err) {
+            alert('Error al recortar la imagen: ' + (err.message || err));
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    function init() {
+        [
+            ['newProfilePic', 'avatar'],
+            ['editProfilePic', 'avatar'],
+            ['newCoverPic', 'cover'],
+            ['editCoverPic', 'cover']
+        ].forEach(([id, kind]) => {
+            const input = $(id);
+            if (input) input.addEventListener('change', () => openCropper(input, kind));
+        });
+
+        const stage = $('cropStage');
+        stage.addEventListener('pointerdown', onPointerDown);
+        stage.addEventListener('pointermove', onPointerMove);
+        stage.addEventListener('pointerup', onPointerUp);
+        stage.addEventListener('pointercancel', onPointerUp);
+        stage.addEventListener('wheel', onWheel, { passive: false });
+
+        // Evita que la página de fondo se desplace mientras se recorta
+        $('cropModal').addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+        $('cropCancelBtn').addEventListener('click', () => closeCropper({ cancelled: true }));
+        $('cropConfirmBtn').addEventListener('click', confirmCrop);
+
+        window.addEventListener('resize', () => { if (session) fitImage(); });
+
+        // Botón "Atrás" del móvil: cierra solo el recorte, no el modal de perfil que está debajo.
+        window.addEventListener('popstate', function (e) {
+            if (!session) return;
+            const view = e.state ? e.state.view : null;
+            if (view === 'cropModal') return;
+            e.stopImmediatePropagation();
+            closeCropper({ cancelled: true, fromHistory: true });
+        }, true);
+    }
+
+    init();
 })();

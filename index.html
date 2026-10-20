@@ -233,6 +233,20 @@
         </div>
     </div>
 
+    <!-- RECORTE-PERFIL-PORTADA: ventana de recorte de fotos -->
+    <div id="cropModal" class="crop-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="cropTitle">
+        <div class="crop-bar">
+            <button type="button" class="crop-btn" id="cropCancelBtn">Cancelar</button>
+            <h2 class="crop-title" id="cropTitle">Recortar</h2>
+            <button type="button" class="crop-btn crop-confirm" id="cropConfirmBtn">Listo</button>
+        </div>
+        <div class="crop-stage" id="cropStage">
+            <img id="cropImg" alt="" draggable="false">
+            <div class="crop-frame" id="cropFrame"></div>
+        </div>
+        <p class="crop-hint">Arrastra para mover · Pellizca o usa la rueda para ampliar</p>
+    </div>
+
     <script src="app.js" defer></script>
 
     <!-- Registro del Service Worker para funcionamiento offline -->
