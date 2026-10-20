@@ -1159,7 +1159,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
             <div class="post-main">
                 <div class="post-header" style="justify-content: space-between; width: 100%;">
                     <div style="display: flex; gap: 4px; align-items: center;"><span class="post-author sync-name profile-link" role="button" tabindex="0">${escapeHtml(ap.name || 'Usuario')}</span><span class="post-handle sync-handle profile-link" role="button" tabindex="0">${escapeHtml(ap.handle || '@usuario')} · ${dateStr}</span></div>
-                    <div class="post-options" style="position: relative;"><button class="post-options-btn" onclick="toggleDropdown(event, this)">⋮</button><div class="post-dropdown"><div class="post-dropdown-item" onclick="editPost(event, this)">Editar</div>${mArr && mArr.length > 0 ? '<div class="post-dropdown-item" onclick="downloadPostMedia(event, this)">Descargar .zip</div>' : ''}<div class="post-dropdown-item danger" onclick="deletePost(event, this)">Eliminar</div></div></div>
+                    <div class="post-options" style="position: relative;"><button class="post-options-btn" onclick="toggleDropdown(event, this)">⋮</button><div class="post-dropdown"><div class="post-dropdown-item" onclick="editPost(event, this)">Editar</div>${mArr && mArr.length > 0 ? '<div class="post-dropdown-item" onclick="downloadPostMedia(event, this)">Descargar .zip</div>' : ''}<div class="post-dropdown-item" onclick="exportPost(event, this)">Exportar</div><div class="post-dropdown-item" onclick="openMovePostModal(event, this)">Mover a</div><div class="post-dropdown-item danger" onclick="deletePost(event, this)">Eliminar</div></div></div>
                 </div>
                 ${text ? `<div class="post-content">${div.dataset.isAdvanced === 'true' ? text : renderTextWithHashtags(text)}</div>` : ''}
             </div>
@@ -2944,7 +2944,7 @@ window.addEventListener('popstate', (e) => {
 // [bloqueo-scroll-perfil] === INYECCIÓN: BLOQUEO DE DESPLAZAMIENTO EN MODALES (POST Y PERFIL) ===
 (function () {
     const LOCK_CLASS = 'post-modal-lock';
-    const LOCKING_MODAL_IDS = ['postModal', 'editModal', 'newProfileModal'];
+    const LOCKING_MODAL_IDS = ['postModal', 'editModal', 'newProfileModal', 'moveProfileModal'];
     const modals = LOCKING_MODAL_IDS
         .map(id => document.getElementById(id))
         .filter(Boolean);
@@ -3221,4 +3221,491 @@ window.addEventListener('popstate', (e) => {
             delete btn.dataset.busy;
         }
     };
+})();
+
+// === INYECCIÓN: EXPORTAR / IMPORTAR POSTS (.tnpost) ===
+(function () {
+    const POST_MAGIC = 'TNPOST1:';
+    const POST_FORMAT = 'tweetnote-post-v1';
+    const CHUNK_SIZE = 8 * 1024 * 1024;
+
+    // ---------- Utilidades ----------
+    function extOf(name, fallback) {
+        const m = /\.([a-zA-Z0-9]{1,8})$/.exec(name || '');
+        return m ? m[1].toLowerCase() : fallback;
+    }
+
+    function safeName(value, fallback) {
+        const s = String(value || '').replace(/[^a-zA-Z0-9_-]/g, '');
+        return s || fallback;
+    }
+
+    async function getMediaDirIO() {
+        if (!folderHandle) folderHandle = await navigator.storage.getDirectory();
+        return folderHandle.getDirectoryHandle('media', { create: true });
+    }
+
+    function busyToast(message) {
+        let el = document.getElementById('postIoToast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'postIoToast';
+            el.className = 'post-io-toast';
+            document.body.appendChild(el);
+        }
+        el.textContent = message;
+        el.style.display = 'block';
+        return {
+            update(text) { el.textContent = text; },
+            done(text, ms = 2600) {
+                el.textContent = text;
+                setTimeout(() => { el.style.display = 'none'; }, ms);
+            },
+            close() { el.style.display = 'none'; }
+        };
+    }
+
+    function downloadBlobIO(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 120000);
+    }
+
+    // Escritura por bloques: evita cargar archivos grandes de golpe en memoria.
+    async function writeBlobIO(dirHandle, filename, blob) {
+        const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable();
+        try {
+            for (let off = 0; off < blob.size; off += CHUNK_SIZE) {
+                await writable.write(blob.slice(off, Math.min(off + CHUNK_SIZE, blob.size)));
+            }
+            await writable.close();
+        } catch (err) {
+            try { await writable.abort(); } catch (_) {}
+            throw err;
+        }
+    }
+
+    // ---------- EXPORTAR ----------
+    function findPostContextIO(btn) {
+        const pEl = btn.closest('.post');
+        if (!pEl) return null;
+        const tEl = pEl.closest('.thread-container, .profile-response-context');
+        const thread = tEl ? threadsData.find(t => t.id === tEl.dataset.threadId) : null;
+        if (!thread) return null;
+        const index = thread.posts.findIndex(p => p.id === pEl.dataset.id);
+        if (index === -1) return null;
+        return { thread, index, post: thread.posts[index] };
+    }
+
+    async function buildPostArchiveIO(posts, author, mediaDir) {
+        const files = new Map();   // nombre dentro del paquete -> Blob
+        let dropped = 0;
+
+        async function addFile(name, fallbackBlob) {
+            if (!name) return null;
+            if (files.has(name)) return name;
+            let blob = null;
+            try { blob = await (await mediaDir.getFileHandle(name)).getFile(); } catch (e) { blob = null; }
+            if (!blob && fallbackBlob instanceof Blob) blob = fallbackBlob;   // aún sin guardar en disco
+            if (!blob || blob.size === 0) return null;
+            files.set(name, blob);
+            return name;
+        }
+
+        const exportedPosts = [];
+        for (const p of posts) {
+            const media = [];
+            const list = Array.isArray(p.media) ? p.media : [];
+            for (let j = 0; j < list.length; j++) {
+                const m = list[j] || {};
+                const ext = extOf(m.path || (m.file && m.file.name), m.isVideo ? 'mp4' : 'jpg');
+                const mainName = m.path || (m.file ? `unsaved_${p.id}_${j}.${ext}` : null);
+                const thumbName = m.thumbPath || (m.thumbBlob ? `unsaved_${p.id}_${j}_thumb.webp` : null);
+                const mainRef = await addFile(mainName, m.file);
+                const thumbRef = await addFile(thumbName, m.thumbBlob);
+                const path = mainRef || thumbRef;
+                if (!path) { dropped++; continue; }
+                media.push({ isVideo: !!m.isVideo, path: path, thumbPath: thumbRef || null });
+            }
+            exportedPosts.push({
+                text: p.text || '',
+                isAdvanced: !!p.isAdvanced,
+                createdAt: p.createdAt || null,
+                media: media
+            });
+        }
+
+        const entries = [];
+        const blobs = [];
+        let offset = 0;
+        files.forEach((blob, name) => {
+            entries.push({ name: name, size: blob.size, type: blob.type || 'application/octet-stream', offset: offset });
+            blobs.push(blob);
+            offset += blob.size;
+        });
+
+        const manifest = {
+            format: POST_FORMAT,
+            exportedAt: new Date().toISOString(),
+            originalAuthor: author ? { name: author.name || '', handle: author.handle || '' } : null,
+            posts: exportedPosts,
+            files: entries
+        };
+
+        const encoder = new TextEncoder();
+        const manifestBytes = encoder.encode(JSON.stringify(manifest));
+        const headerBytes = encoder.encode(POST_MAGIC + manifestBytes.byteLength + '\n');
+        const archive = new Blob([headerBytes, manifestBytes, ...blobs], { type: 'application/octet-stream' });
+        return { archive: archive, dropped: dropped };
+    }
+
+    window.exportPost = async function (e, btn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const dropdown = btn.closest('.post-dropdown');
+        if (dropdown) dropdown.style.display = 'none';
+        if (btn.dataset.busy === 'true') return;
+
+        const ctx = findPostContextIO(btn);
+        if (!ctx) { alert('No se encontró el post.'); return; }
+
+        btn.dataset.busy = 'true';
+        const toast = busyToast('Preparando exportación…');
+        try {
+            const mediaDir = await getMediaDirIO();
+            // Post principal: exporta también todas sus respuestas. Respuesta: solo esa respuesta.
+            const posts = ctx.index === 0 ? ctx.thread.posts.slice() : [ctx.post];
+            const author = profiles.find(pr => pr.id === ctx.post.authorId) || null;
+            const result = await buildPostArchiveIO(posts, author, mediaDir);
+
+            const handle = safeName(author && author.handle ? author.handle.replace(/^@/, '') : '', 'usuario');
+            const dateTag = new Date().toISOString().slice(0, 10);
+            downloadBlobIO(result.archive, `${handle}_post_${safeName(ctx.post.id, 'post')}_${dateTag}.tnpost`);
+
+            const replies = posts.length - 1;
+            toast.done(replies > 0
+                ? `Post exportado con ${replies} ${replies === 1 ? 'respuesta' : 'respuestas'}.`
+                : 'Post exportado.');
+            if (result.dropped > 0) {
+                alert(`Atención: ${result.dropped} archivo(s) multimedia no se encontraron y no se incluyeron.`);
+            }
+        } catch (err) {
+            toast.close();
+            console.error('Error al exportar el post:', err);
+            alert('Error al exportar el post: ' + (err.message || err));
+        } finally {
+            delete btn.dataset.busy;
+        }
+    };
+
+    // ---------- IMPORTAR ----------
+    async function readPostArchiveIO(file) {
+        const probe = new Uint8Array(await file.slice(0, 256).arrayBuffer());
+        const nl = probe.indexOf(10);
+        if (nl === -1) throw new Error('El archivo no es un post exportado (.tnpost) válido.');
+
+        const header = new TextDecoder().decode(probe.subarray(0, nl));
+        if (!header.startsWith(POST_MAGIC)) throw new Error('El archivo no es un post exportado (.tnpost) válido.');
+
+        const length = parseInt(header.slice(POST_MAGIC.length), 10);
+        if (!Number.isFinite(length) || length <= 0) throw new Error('Cabecera del paquete inválida.');
+
+        const manifestStart = nl + 1;
+        const dataStart = manifestStart + length;
+        if (dataStart > file.size) throw new Error('El archivo está incompleto o corrupto.');
+
+        const manifest = JSON.parse(await file.slice(manifestStart, dataStart).text());
+        if (!manifest || manifest.format !== POST_FORMAT || !Array.isArray(manifest.posts) || manifest.posts.length === 0) {
+            throw new Error('El paquete no contiene ningún post válido.');
+        }
+        return { manifest: manifest, dataStart: dataStart };
+    }
+
+    window.requestImportPost = function () {
+        const txt = document.getElementById('postText');
+        const hasDraft = (txt && txt.innerText.trim().length > 0) || selectedMediaFiles.length > 0;
+        if (hasDraft && !confirm('Se descartará lo que estás escribiendo. ¿Importar de todas formas?')) return;
+        document.getElementById('importPostInput').click();
+    };
+
+    window.importPostFromFile = async function (event) {
+        const input = event.target;
+        const file = input && input.files ? input.files[0] : null;
+        if (!file) return;
+
+        const importBtn = document.getElementById('importPostBtn');
+        const submitBtn = document.getElementById('postSubmitBtn');
+        if (importBtn) importBtn.disabled = true;
+        if (submitBtn) submitBtn.disabled = true;
+        const toast = busyToast('Importando post…');
+
+        try {
+            if (editingPostElement) throw new Error('Termina o cancela la edición antes de importar.');
+
+            const targetProfile = profiles.find(p => p.id === activeProfileId);
+            if (!targetProfile) throw new Error('No hay un perfil activo.');
+
+            const parsed = await readPostArchiveIO(file);
+            const manifest = parsed.manifest;
+            const dataStart = parsed.dataStart;
+            const mediaDir = await getMediaDirIO();
+
+            const batchId = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+
+            // 1. Copiar la multimedia con nombres nuevos (evita colisiones con lo existente)
+            const fileMap = new Map();   // nombre original del paquete -> nombre nuevo en OPFS
+            const filesList = Array.isArray(manifest.files) ? manifest.files : [];
+            for (let i = 0; i < filesList.length; i++) {
+                const f = filesList[i];
+                if (!f || !f.name || !(f.size > 0)) continue;
+                const start = dataStart + (f.offset || 0);
+                const end = start + f.size;
+                if (end > file.size) continue;
+
+                const newName = `imp_${batchId}_${i}.${extOf(f.name, 'bin')}`;
+                await writeBlobIO(mediaDir, newName, file.slice(start, end, f.type || 'application/octet-stream'));
+                fileMap.set(f.name, newName);
+
+                if (i % 5 === 0) {
+                    toast.update(`Importando multimedia… ${Math.round(((i + 1) / filesList.length) * 100)}%`);
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+
+            // 2. Construir el hilo: el post y sus respuestas, publicados por el perfil activo
+            const replyTotal = manifest.posts.length - 1;
+            let dropped = 0;
+            const baseTime = Date.now();
+            const newPosts = manifest.posts.map((p, pIdx) => {
+                const media = [];
+                (Array.isArray(p.media) ? p.media : []).forEach(m => {
+                    const mainRef = m.path ? fileMap.get(m.path) : null;
+                    const thumbRef = m.thumbPath ? fileMap.get(m.thumbPath) : null;
+                    const path = mainRef || thumbRef;
+                    if (!path) { dropped++; return; }
+                    const obj = { isVideo: !!m.isVideo, path: path };
+                    if (thumbRef) obj.thumbPath = thumbRef;
+                    media.push(obj);
+                });
+                return {
+                    id: `post_${batchId}_${pIdx}`,
+                    text: p.text || '',
+                    authorId: targetProfile.id,
+                    isAdvanced: !!p.isAdvanced,
+                    replyCount: pIdx === 0 ? replyTotal : 0,
+                    createdAt: new Date(baseTime + pIdx).toISOString(),
+                    media: media
+                };
+            });
+
+            const thread = { id: `thread_${batchId}`, posts: newPosts };
+
+            // 3. Guardar y mostrar
+            threadsData.unshift(thread);
+            await saveThreadToFolder(thread);
+
+            closePostModal();
+
+            const inThread = document.body.classList.contains('in-thread-view');
+            if (!inThread) {
+                if (currentTab === 'search') renderSearchResults(document.getElementById('searchInput').value);
+                else if (currentTab === 'profile') renderProfileContent();
+                else renderAllFeed();
+                window.scrollTo({ top: 0 });
+            }
+
+            toast.done(`Post importado${replyTotal > 0 ? ` con ${replyTotal} ${replyTotal === 1 ? 'respuesta' : 'respuestas'}` : ''}.`);
+            if (dropped > 0) {
+                alert(`Algunos archivos multimedia no estaban en el paquete y se omitieron (${dropped}).`);
+            }
+        } catch (err) {
+            toast.close();
+            console.error('Error al importar el post:', err);
+            alert('Error al importar el post: ' + (err.message || err));
+        } finally {
+            input.value = '';
+            if (importBtn) importBtn.disabled = false;
+            if (submitBtn) submitBtn.disabled = false;
+        }
+    };
+
+    // ---------- Ocultar "Importar" al editar y mostrarlo al cerrar ----------
+    const _editPostIO = editPost;
+    editPost = function (e, btn) {
+        _editPostIO(e, btn);
+        const b = document.getElementById('importPostBtn');
+        if (b) b.style.display = 'none';
+    };
+
+    const _clearPostFormIO = clearPostForm;
+    clearPostForm = function () {
+        _clearPostFormIO();
+        const b = document.getElementById('importPostBtn');
+        if (b) b.style.display = '';
+    };
+})();
+
+
+// === INYECCIÓN: MOVER POST (Y SUS RESPUESTAS) A OTRO PERFIL ===
+(function () {
+    let movePending = null; // { threadId, postId, scope: 'thread' | 'post', currentAuthorId }
+
+    function resolveMoveContext(btn) {
+        const pEl = btn.closest('.post');
+        if (!pEl) return null;
+        const tEl = pEl.closest('.thread-container, .profile-response-context');
+        if (!tEl) return null;
+        const thread = threadsData.find(t => t.id === tEl.dataset.threadId);
+        if (!thread || !thread.posts) return null;
+        const index = thread.posts.findIndex(p => p.id === pEl.dataset.id);
+        if (index === -1) return null;
+        const post = thread.posts[index];
+        return {
+            threadId: thread.id,
+            postId: post.id,
+            // El post principal (índice 0) arrastra todas sus respuestas; una respuesta se mueve sola.
+            scope: index === 0 ? 'thread' : 'post',
+            currentAuthorId: post.authorId
+        };
+    }
+
+    function countMovablePosts(ctx) {
+        if (ctx.scope === 'post') return 1;
+        const t = threadsData.find(th => th.id === ctx.threadId);
+        return t && t.posts ? t.posts.length : 1;
+    }
+
+    function buildMoveTargetCard(p) {
+        const card = document.createElement('div');
+        card.className = 'search-profile-card';
+        card.setAttribute('role', 'button');
+        card.tabIndex = 0;
+
+        const avatar = document.createElement('div');
+        avatar.className = 'search-profile-avatar';
+        setMediaElement(avatar, p.avatarThumb || p.avatarThumbPath || p.avatar || p.avatarPath);
+
+        const info = document.createElement('div');
+        info.className = 'search-profile-info';
+        const name = document.createElement('span');
+        name.className = 'search-profile-name';
+        name.textContent = p.name || 'Usuario';
+        const handle = document.createElement('span');
+        handle.className = 'search-profile-handle';
+        handle.textContent = p.handle || '@usuario';
+        info.appendChild(name);
+        info.appendChild(handle);
+
+        card.appendChild(avatar);
+        card.appendChild(info);
+
+        const choose = () => applyMove(p.id);
+        card.addEventListener('click', choose);
+        card.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(); }
+        });
+        return card;
+    }
+
+    function showMoveToast(message) {
+        let el = document.getElementById('postIoToast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'postIoToast';
+            el.className = 'post-io-toast';
+            document.body.appendChild(el);
+        }
+        el.textContent = message;
+        el.style.display = 'block';
+        clearTimeout(showMoveToast.timer);
+        showMoveToast.timer = setTimeout(() => { el.style.display = 'none'; }, 2600);
+    }
+
+    function closeMoveProfileModal(fromHistory = false) {
+        const modal = document.getElementById('moveProfileModal');
+        if (modal) modal.style.display = 'none';
+        movePending = null;
+        if (fromHistory !== true && history.state && history.state.view === 'moveProfileModal') history.back();
+    }
+    window.closeMoveProfileModal = closeMoveProfileModal;
+
+    window.openMovePostModal = function (e, btn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const dropdown = btn.closest('.post-dropdown');
+        if (dropdown) dropdown.style.display = 'none';
+
+        const ctx = resolveMoveContext(btn);
+        if (!ctx) { alert('No se encontró el post.'); return; }
+
+        const targets = profiles.filter(p => p.id !== ctx.currentAuthorId);
+        if (targets.length === 0) {
+            alert('Necesitas otro perfil al que mover este post. Crea uno primero.');
+            return;
+        }
+
+        movePending = ctx;
+        const total = countMovablePosts(ctx);
+        document.getElementById('moveProfileHint').textContent = total > 1
+            ? `Se moverán ${total} posts: el post y todas sus respuestas. Elige el perfil de destino.`
+            : 'Elige el perfil al que quieres mover este post.';
+
+        const list = document.getElementById('moveProfileList');
+        list.innerHTML = '';
+        targets.forEach(p => list.appendChild(buildMoveTargetCard(p)));
+
+        _pushStateIfMissing('moveProfileModal');
+        document.getElementById('moveProfileModal').style.display = 'flex';
+    };
+
+    async function applyMove(targetId) {
+        const ctx = movePending;
+        if (!ctx) return;          // evita dobles toques
+        movePending = null;
+
+        const target = profiles.find(p => p.id === targetId);
+        const thread = threadsData.find(t => t.id === ctx.threadId);
+        closeMoveProfileModal();
+
+        if (!target || !thread) { showMoveToast('No se pudo mover el post.'); return; }
+
+        // Reasignar autoría: el perfil de destino figura como autor original.
+        const total = ctx.scope === 'thread' ? thread.posts.length : 1;
+        if (ctx.scope === 'thread') {
+            thread.posts.forEach(p => { p.authorId = target.id; });
+        } else {
+            const post = thread.posts.find(p => p.id === ctx.postId);
+            if (post) post.authorId = target.id;
+        }
+
+        try {
+            await saveThreadToFolder(thread);
+        } catch (err) {
+            console.error('Error al guardar el movimiento:', err);
+            alert('El post se movió, pero no se pudo guardar: ' + (err.message || err));
+        }
+
+        const inThread = document.body.classList.contains('in-thread-view');
+        if (!inThread && currentTab === 'search') renderSearchResults(document.getElementById('searchInput').value);
+        else if (!inThread && currentTab === 'profile') renderProfileContent();
+        else renderAllFeed();
+
+        const replies = total - 1;
+        showMoveToast(ctx.scope === 'thread' && replies > 0
+            ? `Post y ${replies} ${replies === 1 ? 'respuesta movidos' : 'respuestas movidas'} a ${target.name}.`
+            : `Post movido a ${target.name}.`);
+    }
+
+    // Botón Atrás del móvil: cierra el modal de "Mover a".
+    window.addEventListener('popstate', function (e) {
+        const view = e.state ? e.state.view : null;
+        const modal = document.getElementById('moveProfileModal');
+        if (modal && modal.style.display === 'flex' && view !== 'moveProfileModal') closeMoveProfileModal(true);
+    });
 })();

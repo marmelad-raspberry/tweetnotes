@@ -198,7 +198,11 @@
                         <input type="file" id="postMedia" accept="image/*, video/*" multiple hidden>
                     </label>
                 </div>
-                <button class="submit-btn" id="postSubmitBtn" onclick="submitPost()">Postear</button>
+                <div class="media-actions-right">
+                    <button type="button" id="importPostBtn" class="import-post-btn" onclick="requestImportPost()" title="Importar post">📥 Importar</button>
+                    <input type="file" id="importPostInput" accept=".tnpost,application/octet-stream" hidden onchange="importPostFromFile(event)">
+                    <button class="submit-btn" id="postSubmitBtn" onclick="submitPost()">Postear</button>
+                </div>
             </div>
         </div>
     </div>
@@ -214,6 +218,21 @@
         <div id="verticalViewerScroll" class="vertical-viewer-scroll"></div>
     </div>
     
+    <div class="modal" id="moveProfileModal" onclick="if(event.target === this) closeMoveProfileModal()">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <div class="close-btn" onclick="closeMoveProfileModal()">&times;</div>
+                    <h2>Mover a perfil</h2>
+                </div>
+            </div>
+            <div class="modal-body" style="padding: 0 0 16px;">
+                <p class="move-profile-hint" id="moveProfileHint"></p>
+                <div class="search-profile-list" id="moveProfileList"></div>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js" defer></script>
 
     <!-- Registro del Service Worker para funcionamiento offline -->

@@ -427,3 +427,49 @@ body.pc-theme #newProfileModal .modal-header {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
 }
+
+
+/* === MOVER POST A OTRO PERFIL: modal de selección === */
+.move-profile-hint {
+    margin: 0;
+    padding: 12px 16px 8px;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 19px;
+}
+
+#moveProfileModal {
+    background: rgba(0, 0, 0, 0.5) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+
+#moveProfileModal .modal-header {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+
+@media (min-width: 768px) {
+    #moveProfileModal {
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 24px !important;
+        animation: none !important;
+    }
+
+    #moveProfileModal .modal-content {
+        max-width: 560px !important;
+        width: 100% !important;
+        height: auto !important;
+        max-height: 85vh !important;
+        margin: auto !important;
+        border-radius: 16px !important;
+        border: 1px solid var(--border-color) !important;
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35) !important;
+        animation: none !important;
+    }
+
+    #moveProfileModal .modal-header {
+        border-radius: 16px 16px 0 0 !important;
+    }
+}

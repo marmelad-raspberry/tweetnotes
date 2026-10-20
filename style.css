@@ -666,3 +666,10 @@ body.post-modal-lock {
 #newProfileModal .modal-content {
     overscroll-behavior: contain;
 }
+
+/* === INYECCIÓN: EXPORTAR / IMPORTAR POSTS === */
+.media-actions-right { display: flex; align-items: center; gap: 8px; }
+.import-post-btn { height: 36px; padding: 0 14px; border-radius: 9999px; border: 1px solid #cfd9de; background: transparent; color: var(--primary-blue); font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: background 0.2s, opacity 0.2s; }
+.import-post-btn:hover { background: rgba(29, 155, 240, 0.1); }
+.import-post-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.post-io-toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); max-width: 90vw; padding: 10px 18px; border-radius: 9999px; background: rgba(15, 20, 25, 0.9); color: #fff; font-size: 14px; font-weight: 600; text-align: center; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25); z-index: 2000; pointer-events: none; }
