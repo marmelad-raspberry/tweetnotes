@@ -1,3 +1,25 @@
+/*perf:vv-coalesce*/
+// Rendimiento: los eventos resize/scroll de visualViewport (teclado móvil) se
+// disparan decenas de veces por segundo y hay varios manejadores registrados.
+// Se agrupan para que cada manejador se ejecute como máximo una vez por frame.
+(function () {
+    if (!window.visualViewport || window.__vvCoalesced) return;
+    window.__vvCoalesced = true;
+    const vv = window.visualViewport;
+    const orig = vv.addEventListener.bind(vv);
+    vv.addEventListener = function (type, fn, opts) {
+        if ((type !== 'resize' && type !== 'scroll') || typeof fn !== 'function') return orig(type, fn, opts);
+        let scheduled = false;
+        let lastEvent = null;
+        return orig(type, function (e) {
+            lastEvent = e;
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(function () { scheduled = false; fn.call(vv, lastEvent); });
+        }, opts);
+    };
+})();
+
     const FOLDER_DB_NAME = 'yu_folder_storage';
     const FOLDER_DB_VERSION = 2;
     const FOLDER_DB_STORE = 'settings';
@@ -49,6 +71,7 @@
                         el.dataset.blobUrl = url;
                         if (el.tagName === 'IMG' || el.tagName === 'VIDEO') el.src = url;
                         else el.style.backgroundImage = `url("${url}")`;
+                        lazyMediaObserver.unobserve(el); /*perf:lazy-unobserve*/
                     } catch (e) {
                         const errUrl = 'data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23eaeaea"/%3E%3Ctext x="50" y="50" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="12" fill="%23666"%3E%5BError 404%5D%3C/text%3E%3C/svg%3E';
                         if (el.tagName === 'IMG') el.src = errUrl;
@@ -61,7 +84,8 @@
     }, { rootMargin: '400px 0px' });
 
     function setMediaElement(el, urlOrPath) {
-        if (!el) return;
+        if (!el) return; /*perf:decoding-async*/
+        if (el.tagName === 'IMG') el.decoding = 'async';
         lazyMediaObserver.unobserve(el);
         if (!urlOrPath) {
             delete el.dataset.blobUrl;
@@ -124,7 +148,7 @@
     }, { rootMargin: '600px 0px' });
 
     function startVirtualFeed(feedElement, initialItems = []) {
-        virtualFeedQueue = initialItems;
+        virtualFeedQueue = initialItems; virtualDomObserver.disconnect(); /*perf:feed-disconnect*/
         feedElement.innerHTML = '';
         renderVirtualBatch();
         if (!virtualSentinel) {
@@ -480,11 +504,12 @@ async function loadStateFromFolder() {
         console.error("Error cargando desde IndexedDB", e);
     }
     
-    threadsData.sort((a,b) => {
-        const maxA = a.posts && a.posts.length > 0 ? a.posts.reduce((m, p) => p.id > m ? p.id : m, a.id) : a.id;
-        const maxB = b.posts && b.posts.length > 0 ? b.posts.reduce((m, p) => p.id > m ? p.id : m, b.id) : b.id;
-        return maxB.localeCompare(maxA);
+    /*perf:sort-precompute*/
+    const _sortKeys = new Map();
+    threadsData.forEach(t => {
+        _sortKeys.set(t, t.posts && t.posts.length > 0 ? t.posts.reduce((m, p) => p.id > m ? p.id : m, t.id) : t.id);
     });
+    threadsData.sort((a, b) => String(_sortKeys.get(b)).localeCompare(String(_sortKeys.get(a))));
     if (profiles.length > 0 && !profiles.some(p => p.id === activeProfileId)) activeProfileId = profiles[0].id;
 }
 
@@ -1040,7 +1065,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                 el.setAttribute('playsinline', '');
                 el.setAttribute('webkit-playsinline', '');
                 el.loop = true;
-                el.preload = 'auto';
+                el.preload = 'metadata'; /*perf:video-preload*/
                 el.controls = false;
                 if (m.thumbPath && mediaCache.has(m.thumbPath)) {
                     el.poster = mediaCache.get(m.thumbPath);
@@ -1771,7 +1796,8 @@ async function openVerticalViewer(mediaArr, index) {
     const items = scrollContainer.children;
     if (items[index]) items[index].scrollIntoView({ behavior: 'instant', block: 'start' });
     
-    const observer = new IntersectionObserver((entries) => {
+    if (window.__vvObs) window.__vvObs.disconnect(); /*perf:vertical-observer*/
+    const observer = window.__vvObs = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 loadVerticalMedia(entry.target);
@@ -1822,7 +1848,7 @@ async function loadVerticalMedia(container, isPreload = false) {
             fullUrl = await getMediaUrl(mediaDir, m.path);
         } catch(e) {}
     }
-    if (fullUrl) verticalViewerUrls.set(realIdx, fullUrl);
+    if (fullUrl) verticalViewerUrls.set(verticalViewerUrls.has(realIdx) ? realIdx + ':' + idx : realIdx, fullUrl); /*perf:vertical-urls*/
     
     if (m.isVideo) {
         const el = document.createElement('video');
@@ -1859,6 +1885,7 @@ function closeVerticalViewer(fromHistory = false) {
     if(modal) modal.style.display = 'none';
     const scrollContainer = document.getElementById('verticalViewerScroll');
     if(scrollContainer) scrollContainer.innerHTML = '';
+    if (window.__vvObs) { window.__vvObs.disconnect(); window.__vvObs = null; } /*perf:vertical-observer-close*/
     verticalViewerUrls.forEach(url => URL.revokeObjectURL(url));
     verticalViewerUrls.clear();
     if (fromHistory !== true && history.state && history.state.view === 'verticalViewerModal') history.back();
@@ -2223,7 +2250,8 @@ window.addEventListener('popstate', (e) => {
             }
         });
 
-        window.addEventListener('mousemove', function(e) {
+        window.addEventListener('mousemove', function zoomMove(e) { /*perf:zoom-mousemove-leak*/
+            if (!el.isConnected) { window.removeEventListener('mousemove', zoomMove); return; }
             if (!isMouseDown) return;
             const dx = e.clientX - startPanX;
             const dy = e.clientY - startPanY;
@@ -2235,7 +2263,8 @@ window.addEventListener('popstate', (e) => {
             updateTransform(false);
         });
 
-        window.addEventListener('mouseup', function() {
+        window.addEventListener('mouseup', function zoomUp() { /*perf:zoom-mouseup-leak*/
+            if (!el.isConnected) { window.removeEventListener('mouseup', zoomUp); return; }
             if (isMouseDown) {
                 isMouseDown = false;
                 el.style.cursor = scale > 1.01 ? 'grab' : '';
@@ -4411,4 +4440,24 @@ window.addEventListener('popstate', (e) => {
     }
 
     init();
+})();
+
+/*perf:idb-cache*/
+// === RENDIMIENTO: una sola conexión a IndexedDB reutilizada ===
+// Antes cada guardado/lectura abría una conexión nueva que muchas veces nunca se cerraba.
+// Ahora se reutiliza una única conexión; los db.close() existentes pasan a ser inofensivos.
+(function () {
+    const _openOriginal = openFolderDatabase;
+    let cached = null;
+    openFolderDatabase = function () {
+        if (cached) return cached;
+        cached = _openOriginal().then(function (db) {
+            const realClose = db.close.bind(db);
+            db.close = function () { /* conexión compartida: no se cierra */ };
+            db.onversionchange = function () { cached = null; realClose(); };
+            db.onclose = function () { cached = null; };
+            return db;
+        }).catch(function (err) { cached = null; throw err; });
+        return cached;
+    };
 })();

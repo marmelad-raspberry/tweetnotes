@@ -203,7 +203,7 @@
 /* --- Optimizaciones de Rendimiento Añadidas Automáticamente --- */
 .modal, 
 
-.media-item, .post-avatar, .profile-pic, .compose-avatar, .search-profile-avatar {
+/*perf:css-gpu-layers*/ .modal {
     /* Fuerza el cálculo del elemento en la GPU para que el Virtual Scroll sea fluido */
     transform: translateZ(0); 
     backface-visibility: hidden;
