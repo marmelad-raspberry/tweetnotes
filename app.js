@@ -81,7 +81,7 @@
                 }
             }
         }
-    }, { rootMargin: '400px 0px' });
+    }, { rootMargin: '1500px 0px' }); /*fix:margen-media*/
 
     function setMediaElement(el, urlOrPath) {
         if (!el) return; /*perf:decoding-async*/
@@ -126,14 +126,13 @@
             }
             if (entry.isIntersecting) {
                 if (el.virtualNodeStorage) {
-                    el.style.minHeight = '';
-                    el.appendChild(el.virtualNodeStorage);
+                    /*fix:keep-minheight*/ el.appendChild(el.virtualNodeStorage);
                     el.virtualNodeStorage = null;
                     el.dataset.virtualized = 'false';
                 }
             } else {
                 if (el.dataset.virtualized !== 'true' && el.offsetHeight > 0) {
-                    requestAnimationFrame(() => { el.style.minHeight = el.offsetHeight + 'px'; });
+                    el.style.minHeight = el.getBoundingClientRect().height + 'px'; /*fix:scroll-rebote*/
                     const frag = document.createDocumentFragment();
                     while (el.firstChild) { frag.appendChild(el.firstChild); }
                     el.virtualNodeStorage = frag;
@@ -141,11 +140,11 @@
                 }
             }
         });
-    }, { rootMargin: '1200px 0px' });
+    }, { rootMargin: '3000px 0px' }); /*fix:margen-dom*/
 
     const virtualScrollObserver = new IntersectionObserver((entries) => {
         if (entries[0].isIntersecting) renderVirtualBatch();
-    }, { rootMargin: '600px 0px' });
+    }, { rootMargin: '1500px 0px' }); /*fix:margen-scroll*/
 
     function startVirtualFeed(feedElement, initialItems = []) {
         virtualFeedQueue = initialItems; virtualDomObserver.disconnect(); /*perf:feed-disconnect*/
@@ -1229,7 +1228,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         const iUrls = mArr; 
         let idx = 0;
         mArr.forEach(m => {
-            const w = document.createElement('div'); w.className = 'media-item-wrap';
+            const w = document.createElement('div'); w.className = 'media-item-wrap media-loading';
             const el = document.createElement('img'); 
             const cIdx = idx++; el.onclick = (e) => { e.stopPropagation(); openFullViewer(mArr, cIdx); };
             el.className = 'media-item'; 
@@ -4461,3 +4460,12 @@ window.addEventListener('popstate', (e) => {
         return cached;
     };
 })();
+
+// === FIX: SCROLL SIN REBOTE (quitar placeholder al cargar la imagen) ===
+document.addEventListener('load', function (e) {
+    const t = e.target;
+    if (t && t.tagName === 'IMG') {
+        const w = t.closest ? t.closest('.media-item-wrap.media-loading') : null;
+        if (w) w.classList.remove('media-loading');
+    }
+}, true);

@@ -806,3 +806,21 @@ body.post-modal-lock {
     padding-top: 12px !important;
 }
 /* FIX PERFIL: separación entre avatar y nombre - FIN */
+
+/* === FIX: SCROLL SIN REBOTE === */
+html {
+    /* Reserva el hueco de la barra: el ancho no cambia al variar la altura del feed */
+    scrollbar-gutter: stable;
+}
+html, body {
+    /* Evita el rebote elastico al llegar al inicio/final */
+    overscroll-behavior-y: none;
+}
+/* Espacio reservado para imagenes mientras cargan (evita saltos de altura) */
+.grid-1 .media-item-wrap.media-loading {
+    min-height: 200px;
+    background-color: var(--bg-secondary);
+}
+@media (min-width: 768px) {
+    .post .grid-1 .media-item-wrap.media-loading { min-height: 160px; }
+}
