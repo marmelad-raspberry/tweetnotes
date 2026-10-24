@@ -798,3 +798,11 @@ body.post-modal-lock {
     color: #8e8e93;
     font-size: 13px;
 }
+
+
+/* FIX PERFIL: separación entre avatar y nombre - INICIO */
+.profile-info {
+    /* El avatar se superpone al encabezado; este margen evita tapar el nombre. */
+    padding-top: 12px !important;
+}
+/* FIX PERFIL: separación entre avatar y nombre - FIN */
