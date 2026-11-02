@@ -1,3 +1,149 @@
+/* === UI-DIALOGOS: ventanas propias que sustituyen a alert() y confirm() === */
+(function () {
+    let root = null, titleEl = null, msgEl = null, actionsEl = null;
+    let active = null;          // diálogo abierto: { resolve, result, closing, timer }
+    let queue = Promise.resolve();
+    let lastFocus = null;
+
+    function build() {
+        if (root) return;
+        root = document.createElement('div');
+        root.id = 'uiDialog';
+        root.className = 'ui-dialog-overlay';
+        root.setAttribute('role', 'alertdialog');
+        root.setAttribute('aria-modal', 'true');
+        root.setAttribute('aria-labelledby', 'uiDialogTitle');
+        root.setAttribute('aria-describedby', 'uiDialogMessage');
+        root.innerHTML =
+            '<div class="ui-dialog-box">' +
+            '<h3 class="ui-dialog-title" id="uiDialogTitle"></h3>' +
+            '<p class="ui-dialog-message" id="uiDialogMessage"></p>' +
+            '<div class="ui-dialog-actions" id="uiDialogActions"></div>' +
+            '</div>';
+        document.body.appendChild(root);
+        titleEl = root.querySelector('#uiDialogTitle');
+        msgEl = root.querySelector('#uiDialogMessage');
+        actionsEl = root.querySelector('#uiDialogActions');
+    }
+
+    function finish() {
+        if (!active) return;
+        const a = active;
+        active = null;
+        clearTimeout(a.timer);
+        root.classList.remove('open');
+        root.style.display = 'none';
+        if (lastFocus && typeof lastFocus.focus === 'function') {
+            try { lastFocus.focus({ preventScroll: true }); } catch (_) {}
+        }
+        a.resolve(a.result);
+    }
+
+    function close(value) {
+        if (!active || active.closing) return;
+        active.closing = true;
+        active.result = value;
+        // Se retira la entrada de historial que se añadió al abrir (botón "Atrás" del móvil)
+        if (history.state && history.state.view === 'uiDialog') {
+            active.timer = setTimeout(finish, 500);
+            history.back();
+        } else {
+            finish();
+        }
+    }
+
+    // "Atrás" del móvil o del navegador: cancela el diálogo
+    window.addEventListener('popstate', function () { if (active) finish(); }, true);
+
+    document.addEventListener('keydown', function (e) {
+        if (!active) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            close(active.cancelValue);
+        } else if (e.key === 'Tab') {
+            const btns = Array.from(actionsEl.querySelectorAll('button'));
+            if (btns.length === 0) return;
+            const i = btns.indexOf(document.activeElement);
+            e.preventDefault();
+            const next = e.shiftKey ? (i <= 0 ? btns.length - 1 : i - 1) : (i === -1 || i === btns.length - 1 ? 0 : i + 1);
+            btns[next].focus();
+        } else if (e.key.indexOf('Arrow') === 0) {
+            e.stopPropagation();
+        }
+    }, true);
+
+    function show(opts) {
+        const run = function () {
+            return new Promise(function (resolve) {
+                build();
+                lastFocus = document.activeElement;
+                titleEl.textContent = opts.title || '';
+                titleEl.style.display = opts.title ? '' : 'none';
+                msgEl.textContent = opts.message;
+                actionsEl.innerHTML = '';
+
+                let focusBtn = null;
+                opts.buttons.forEach(function (b) {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'ui-dialog-btn ' + b.cls;
+                    btn.textContent = b.label;
+                    btn.addEventListener('click', function () { close(b.value); });
+                    actionsEl.appendChild(btn);
+                    if (b.focus) focusBtn = btn;
+                });
+
+                active = { resolve: resolve, result: opts.cancelValue, cancelValue: opts.cancelValue, closing: false, timer: null };
+                root.style.display = 'flex';
+                void root.offsetWidth;
+                root.classList.add('open');
+
+                if (!history.state || history.state.view !== 'uiDialog') {
+                    history.pushState({ view: 'uiDialog' }, '');
+                }
+                (focusBtn || actionsEl.querySelector('button')).focus({ preventScroll: true });
+            });
+        };
+        // Los diálogos se muestran de uno en uno
+        const p = queue.then(run);
+        queue = p.catch(function () {});
+        return p;
+    }
+
+    function guessTitle(message) {
+        return /^(error|ocurri[oó] un error|no se pudo)/i.test(message) ? 'Error' : 'Aviso';
+    }
+
+    window.uiAlert = function (message, opts) {
+        opts = opts || {};
+        const text = String(message == null ? '' : message);
+        return show({
+            title: opts.title || guessTitle(text),
+            message: text,
+            cancelValue: true,
+            buttons: [{ label: opts.okText || 'Aceptar', cls: 'primary', value: true, focus: true }]
+        });
+    };
+
+    window.uiConfirm = function (message, opts) {
+        opts = opts || {};
+        const danger = !!opts.danger;
+        return show({
+            title: opts.title || 'Confirmar',
+            message: String(message == null ? '' : message),
+            cancelValue: false,
+            buttons: [
+                { label: opts.cancelText || 'Cancelar', cls: 'secondary', value: false, focus: danger },
+                { label: opts.confirmText || 'Aceptar', cls: danger ? 'danger' : 'primary', value: true, focus: !danger }
+            ]
+        });
+    };
+
+    // Red de seguridad: cualquier alert() que quede usa la ventana propia
+    window.alert = function (message) { window.uiAlert(message); };
+})();
+
 /*perf:vv-coalesce*/
 // Rendimiento: los eventos resize/scroll de visualViewport (teclado móvil) se
 // disparan decenas de veces por segundo y hay varios manejadores registrados.
@@ -730,7 +876,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
     async function createNewProfile() {
         const init = isInitialProfileCreation;
         const nInput = document.getElementById('newName').value.trim(); const hInput = document.getElementById('newHandle').value.trim();
-        if (init && (!nInput || !hInput)) { alert('Introduce nombre y usuario.'); return; }
+        if (init && (!nInput || !hInput)) { uiAlert('Introduce nombre y usuario.'); return; }
         
         const np = {
             id: 'prof_' + Date.now(),
@@ -935,8 +1081,8 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
     function resizePostTextarea() { const ta = document.getElementById('postText'); if (!ta) return; if(ta.tagName === 'DIV') { ta.style.minHeight = '100px'; return; } ta.style.height = 'auto'; const st = window.getComputedStyle(ta); const min = parseFloat(st.minHeight)||100, max = parseFloat(st.maxHeight)||260, nxt = Math.max(min, Math.min(ta.scrollHeight, max)); ta.style.height = `${nxt}px`; ta.style.overflowY = ta.scrollHeight > max ? 'auto' : 'hidden'; }
 
     async function deleteProfile() {
-        if (profiles.length <= 1) { alert('No puedes eliminar el único perfil.'); return; }
-        if (confirm('¿Eliminar perfil, posts y multimedia asociada?')) {
+        if (profiles.length <= 1) { uiAlert('No puedes eliminar el único perfil.'); return; }
+        if (await uiConfirm('Se eliminarán el perfil, todos sus posts y la multimedia asociada. Esta acción no se puede deshacer.', { title: 'Eliminar perfil', confirmText: 'Eliminar', danger: true })) {
             const dId = activeProfileId;
             let threadsToSave = [];
             
@@ -1002,7 +1148,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         }
         this.value = '';
         if (skipped > 0) {
-            alert(`Máximo ${MAX_MEDIA_PER_POST} archivos multimedia (imágenes o videos) por post.`);
+            uiAlert(`Máximo ${MAX_MEDIA_PER_POST} archivos multimedia (imágenes o videos) por post.`);
         }
         renderMediaPreview();
     });
@@ -1170,7 +1316,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
 
     async function deletePost(e, btn) {
         e.stopPropagation();
-        if (confirm('¿Eliminar este post?')) {
+        if (await uiConfirm('Este post se eliminará junto con su multimedia. Esta acción no se puede deshacer.', { title: 'Eliminar post', confirmText: 'Eliminar', danger: true })) {
             const pEl = btn.closest('.post'); const tEl = pEl.closest('.thread-container, .profile-response-context'); if (!tEl) return;
             const tId = tEl.dataset.threadId; const pId = pEl.dataset.id;
             const tIdx = threadsData.findIndex(t => t.id === tId);
@@ -1403,7 +1549,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
             await finishFolderLoad();
         } catch (e) {
             console.error('Error al inicializar OPFS:', e);
-            alert('Tu navegador no soporta el sistema de archivos privado (OPFS).');
+            uiAlert('Tu navegador no soporta el sistema de archivos privado (OPFS).');
         }
     }
 
@@ -2476,7 +2622,7 @@ window.addEventListener('popstate', (e) => {
 
         const profile = profiles.find(p => p.id === activeProfileId);
         if (!profile) {
-            alert('No se encontró el perfil activo.');
+            uiAlert('No se encontró el perfil activo.');
             return;
         }
 
@@ -2636,7 +2782,7 @@ window.addEventListener('popstate', (e) => {
             setTimeout(() => URL.revokeObjectURL(downloadUrl), 120000);
         } catch (err) {
             console.error('Error al exportar el perfil:', err);
-            alert('Ocurrió un error al exportar el perfil: ' + (err.message || err));
+            uiAlert('Ocurrió un error al exportar el perfil: ' + (err.message || err));
         } finally {
             if (btn) {
                 btn.innerText = origText;
@@ -2877,7 +3023,7 @@ window.addEventListener('popstate', (e) => {
             renderAllFeed();
         } catch (err) {
             console.error('Error al importar el perfil:', err);
-            alert('Error al importar el perfil: ' + (err.message || err));
+            uiAlert('Error al importar el perfil: ' + (err.message || err));
         } finally {
             input.value = '';
             if (btn) {
@@ -3293,7 +3439,7 @@ window.addEventListener('popstate', (e) => {
         if (!ctx) return;
         const media = ctx.media;
         if (media.length === 0) {
-            alert('Este post no tiene multimedia.');
+            uiAlert('Este post no tiene multimedia.');
             return;
         }
 
@@ -3330,13 +3476,13 @@ window.addEventListener('popstate', (e) => {
             }
 
             if (entries.length === 0) {
-                alert('No se encontraron los archivos multimedia de este post en el almacenamiento.');
+                uiAlert('No se encontraron los archivos multimedia de este post en el almacenamiento.');
                 return;
             }
 
             const totalBytes = entries.reduce((sum, en) => sum + en.blob.size, 0);
             if (totalBytes > ZIP_MAX_SIZE) {
-                alert('La multimedia de este post supera 4 GB y no puede empaquetarse en un ZIP.');
+                uiAlert('La multimedia de este post supera 4 GB y no puede empaquetarse en un ZIP.');
                 return;
             }
 
@@ -3345,11 +3491,11 @@ window.addEventListener('popstate', (e) => {
             triggerDownload(zipBlob, zipName);
 
             if (missing.length > 0) {
-                alert(`Se incluyeron ${entries.length} de ${media.length} archivos. No se encontraron: ${missing.join(', ')}`);
+                uiAlert(`Se incluyeron ${entries.length} de ${media.length} archivos. No se encontraron: ${missing.join(', ')}`);
             }
         } catch (err) {
             console.error('Error al descargar la multimedia del post:', err);
-            alert('Ocurrió un error al crear el ZIP: ' + (err.message || err));
+            uiAlert('Ocurrió un error al crear el ZIP: ' + (err.message || err));
         } finally {
             btn.textContent = origText;
             btn.style.pointerEvents = '';
@@ -3617,7 +3763,7 @@ window.addEventListener('popstate', (e) => {
         if (btn.dataset.busy === 'true') return;
 
         const ctx = findPostContextIO(btn);
-        if (!ctx) { alert('No se encontró el post.'); return; }
+        if (!ctx) { uiAlert('No se encontró el post.'); return; }
 
         btn.dataset.busy = 'true';
         const toast = busyToast('Preparando exportación…');
@@ -3642,12 +3788,12 @@ window.addEventListener('popstate', (e) => {
                 ? `Post exportado con ${replies} ${replies === 1 ? 'respuesta' : 'respuestas'}.`
                 : 'Post exportado.');
             if (result.dropped > 0) {
-                alert(`Atención: ${result.dropped} archivo(s) multimedia no se encontraron y no se incluyeron.`);
+                uiAlert(`Atención: ${result.dropped} archivo(s) multimedia no se encontraron y no se incluyeron.`);
             }
         } catch (err) {
             toast.close();
             console.error('Error al exportar el post:', err);
-            alert('Error al exportar el post: ' + (err.message || err));
+            uiAlert('Error al exportar el post: ' + (err.message || err));
         } finally {
             delete btn.dataset.busy;
         }
@@ -3676,10 +3822,10 @@ window.addEventListener('popstate', (e) => {
         return { manifest: manifest, dataStart: dataStart };
     }
 
-    window.requestImportPost = function () {
+    window.requestImportPost = async function () {
         const txt = document.getElementById('postText');
         const hasDraft = (txt && txt.innerText.trim().length > 0) || selectedMediaFiles.length > 0;
-        if (hasDraft && !confirm('Se descartará lo que estás escribiendo. ¿Importar de todas formas?')) return;
+        if (hasDraft && !(await uiConfirm('Se descartará lo que estás escribiendo. ¿Importar de todas formas?', { title: 'Importar post', confirmText: 'Importar' }))) return;
         document.getElementById('importPostInput').click();
     };
 
@@ -3842,12 +3988,12 @@ window.addEventListener('popstate', (e) => {
 
             toast.done(`Post importado${replyTotal > 0 ? ` con ${replyTotal}${replyTotal === 1 ? 'respuesta' : 'respuestas'}` : ''}.`);
             if (dropped > 0) {
-                alert(`Algunos archivos multimedia estaban dañados o incompletos en el paquete y se omitieron (${dropped}).`);
+                uiAlert(`Algunos archivos multimedia estaban dañados o incompletos en el paquete y se omitieron (${dropped}).`);
             }
         } catch (err) {
             toast.close();
             console.error('Error al importar el post:', err);
-            alert('Error al importar el post: ' + (err.message || err));
+            uiAlert('Error al importar el post: ' + (err.message || err));
         } finally {
             input.value = '';
             if (importBtn) importBtn.disabled = false;
@@ -3961,11 +4107,11 @@ window.addEventListener('popstate', (e) => {
         if (dropdown) dropdown.style.display = 'none';
 
         const ctx = resolveMoveContext(btn);
-        if (!ctx) { alert('No se encontró el post.'); return; }
+        if (!ctx) { uiAlert('No se encontró el post.'); return; }
 
         const targets = profiles.filter(p => p.id !== ctx.currentAuthorId);
         if (targets.length === 0) {
-            alert('Necesitas otro perfil al que mover este post. Crea uno primero.');
+            uiAlert('Necesitas otro perfil al que mover este post. Crea uno primero.');
             return;
         }
 
@@ -4007,7 +4153,7 @@ window.addEventListener('popstate', (e) => {
             await saveThreadToFolder(thread);
         } catch (err) {
             console.error('Error al guardar el movimiento:', err);
-            alert('El post se movió, pero no se pudo guardar: ' + (err.message || err));
+            uiAlert('El post se movió, pero no se pudo guardar: ' + (err.message || err));
         }
 
         const inThread = document.body.classList.contains('in-thread-view');
@@ -4306,7 +4452,7 @@ window.addEventListener('popstate', (e) => {
         const file = input.files && input.files[0];
         if (!file) return;
         if (!file.type.startsWith('image/')) {
-            alert('Selecciona una imagen.');
+            uiAlert('Selecciona una imagen.');
             input.value = '';
             return;
         }
@@ -4315,7 +4461,7 @@ window.addEventListener('popstate', (e) => {
         try {
             loaded = await loadImage(file);
         } catch (err) {
-            alert(err.message);
+            uiAlert(err.message);
             input.value = '';
             return;
         }
@@ -4396,7 +4542,7 @@ window.addEventListener('popstate', (e) => {
 
             closeCropper({ cancelled: false, fromHistory: false });
         } catch (err) {
-            alert('Error al recortar la imagen: ' + (err.message || err));
+            uiAlert('Error al recortar la imagen: ' + (err.message || err));
         } finally {
             btn.disabled = false;
         }
