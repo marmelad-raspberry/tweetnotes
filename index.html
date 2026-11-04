@@ -29,7 +29,7 @@
         <div id="threadHeader" class="modal-header" style="display: none;">
             <div style="display: flex; align-items: center; gap: 20px;">
                 <div class="close-btn" onclick="closeThreadView()">←</div>
-                <h2>Post</h2>
+                <h2>Nota</h2>
             </div>
         </div>
 
@@ -54,7 +54,7 @@
                 <p class="profile-bio" id="displayBio" style="display: none;"></p>
             </div>
             <div class="profile-content-tabs" id="profileContentTabs">
-                <button class="profile-content-tab active" id="profileTabPosts" onclick="switchProfileContentTab('posts')">Principal</button>
+                <button class="profile-content-tab active" id="profileTabPosts" onclick="switchProfileContentTab('posts')">Notas</button>
                 <button class="profile-content-tab" id="profileTabMedia" onclick="switchProfileContentTab('media')">Multimedia</button>
                 
             </div>
@@ -69,7 +69,7 @@
                 <span class="search-box-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M10.5 4a6.5 6.5 0 1 0 4.056 11.582l4.431 4.432 1.414-1.414-4.432-4.431A6.5 6.5 0 0 0 10.5 4zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9z"/></svg>
                 </span>
-                <input id="searchInput" class="search-box" type="search" autocomplete="off" aria-label="Buscar posts o usuarios" placeholder="Buscar posts o @usuarios">
+                <input id="searchInput" class="search-box" type="search" autocomplete="off" aria-label="Buscar notas o usuarios" placeholder="Buscar notas o @usuarios">
             </div>
         </div>
 
@@ -173,8 +173,8 @@
                 <div class="compose-avatar" id="modalComposeAvatar"></div>
                 <div class="compose-input-area">
                     <div class="compose-profile-row" style="display: none;">
-                        <span class="compose-profile-label">Publicar como</span>
-                        <select id="postProfileSelect" class="compose-profile-select" aria-label="Perfil con el que publicar"></select>
+                        <span class="compose-profile-label">Escribir como</span>
+                        <select id="postProfileSelect" class="compose-profile-select" aria-label="Perfil con el que escribir"></select>
                     </div>
                     <div id="rtToolbar" class="rt-toolbar" style="display:none;">
         <button type="button" class="rt-btn" onmousedown="event.preventDefault();" ontouchstart="event.preventDefault(); execCmd('bold');" data-cmd="bold" onclick="execCmd('bold')" title="Negrita"><b>B</b></button>
@@ -185,7 +185,7 @@
         <button type="button" class="rt-btn" onmousedown="event.preventDefault();" ontouchstart="event.preventDefault(); execCmd('justifyCenter');" data-cmd="justifyCenter" onclick="execCmd('justifyCenter')" title="Alinear Centro">↔</button>
         <button type="button" class="rt-btn" onmousedown="event.preventDefault();" ontouchstart="event.preventDefault(); execCmd('justifyRight');" data-cmd="justifyRight" onclick="execCmd('justifyRight')" title="Alinear Derecha">⇥</button>
     </div>
-    <div id="postText" class="compose-textarea" contenteditable="true" data-placeholder="¡¿Qué está pasando?!"></div>
+    <div id="postText" class="compose-textarea" contenteditable="true" data-placeholder="¿Qué quieres anotar?"></div>
                     <div id="postMediaPreview" class="media-grid"></div>
                 </div>
             </div>
@@ -200,9 +200,9 @@
                     </label>
                 </div>
                 <div class="media-actions-right">
-                    <button type="button" id="importPostBtn" class="import-post-btn" onclick="requestImportPost()" title="Importar post">📥 Importar</button>
+                    <button type="button" id="importPostBtn" class="import-post-btn" onclick="requestImportPost()" title="Importar nota">📥 Importar</button>
                     <input type="file" id="importPostInput" accept=".tnpost,application/octet-stream" hidden onchange="importPostFromFile(event)">
-                    <button class="submit-btn" id="postSubmitBtn" onclick="submitPost()">Postear</button>
+                    <button class="submit-btn" id="postSubmitBtn" onclick="submitPost()">Escribir</button>
                 </div>
             </div>
         </div>

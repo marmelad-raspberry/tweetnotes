@@ -811,7 +811,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         });
 
         if (pFound > 0) {
-            queue.push(() => { const pt = document.createElement('div'); pt.className = 'search-section-title search-posts-title'; pt.textContent = 'Posts'; return pt; });
+            queue.push(() => { const pt = document.createElement('div'); pt.className = 'search-section-title search-posts-title'; pt.textContent = 'Notas'; return pt; });
             queue.push(...threadQueue);
         }
 
@@ -1009,7 +1009,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
                 (t.posts || []).forEach((p, i) => tc.appendChild(createPostElement(p, i === 0 ? function(e){viewThread(this, e);} : null))); 
                 return tc;
             });
-            if (queue.length === 0) queue.push(() => { const e = document.createElement('div'); e.className = 'search-empty-state'; e.textContent = 'Sin posts.'; return e; });
+            if (queue.length === 0) queue.push(() => { const e = document.createElement('div'); e.className = 'search-empty-state'; e.textContent = 'Sin notas.'; return e; });
         } else {
             queue = getProfileReplies(activeProfileId).map(({ thread, mainPost, reply }) => () => {
                 const w = document.createElement('div'); w.className = 'profile-response-context'; w.dataset.threadId = thread.id;
@@ -1082,7 +1082,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
 
     async function deleteProfile() {
         if (profiles.length <= 1) { uiAlert('No puedes eliminar el único perfil.'); return; }
-        if (await uiConfirm('Se eliminarán el perfil, todos sus posts y la multimedia asociada. Esta acción no se puede deshacer.', { title: 'Eliminar perfil', confirmText: 'Eliminar', danger: true })) {
+        if (await uiConfirm('Se eliminarán el perfil, todas sus notas y la multimedia asociada. Esta acción no se puede deshacer.', { title: 'Eliminar perfil', confirmText: 'Eliminar', danger: true })) {
             const dId = activeProfileId;
             let threadsToSave = [];
             
@@ -1115,7 +1115,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
     }
 
     function handleFloatingBtn(e) {
-        if (document.body.classList.contains('in-thread-view')) { const aTh = document.querySelector('.active-thread'); if (aTh) { replyingToPost = aTh.querySelector('.post:first-child'); replyingToThread = aTh; document.getElementById('postText').dataset.placeholder = "Postea tu respuesta"; openPostModal(); return; } } openPostModal();
+        if (document.body.classList.contains('in-thread-view')) { const aTh = document.querySelector('.active-thread'); if (aTh) { replyingToPost = aTh.querySelector('.post:first-child'); replyingToThread = aTh; document.getElementById('postText').dataset.placeholder = "Escribe tu respuesta"; openPostModal(); return; } } openPostModal();
     }
 
     document.getElementById('postProfileSelect').addEventListener('change', function() { setComposerProfile(this.value); });
@@ -1148,7 +1148,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
         }
         this.value = '';
         if (skipped > 0) {
-            uiAlert(`Máximo ${MAX_MEDIA_PER_POST} archivos multimedia (imágenes o videos) por post.`);
+            uiAlert(`Máximo ${MAX_MEDIA_PER_POST} archivos multimedia (imágenes o videos) por nota.`);
         }
         renderMediaPreview();
     });
@@ -1316,7 +1316,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
 
     async function deletePost(e, btn) {
         e.stopPropagation();
-        if (await uiConfirm('Este post se eliminará junto con su multimedia. Esta acción no se puede deshacer.', { title: 'Eliminar post', confirmText: 'Eliminar', danger: true })) {
+        if (await uiConfirm('Esta nota se eliminará junto con su multimedia. Esta acción no se puede deshacer.', { title: 'Eliminar nota', confirmText: 'Eliminar', danger: true })) {
             const pEl = btn.closest('.post'); const tEl = pEl.closest('.thread-container, .profile-response-context'); if (!tEl) return;
             const tId = tEl.dataset.threadId; const pId = pEl.dataset.id;
             const tIdx = threadsData.findIndex(t => t.id === tId);
@@ -1365,8 +1365,8 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
     }
 
     function editPost(e, btn) { e.stopPropagation(); editingPostElement = btn.closest('.post'); window.isAdvancedMode = editingPostElement.dataset.isAdvanced === 'true'; if (window.isAdvancedMode) { document.getElementById('postText').innerHTML = editingPostElement.dataset.rawText || ''; } else { document.getElementById('postText').innerText = editingPostElement.dataset.rawText || ''; } document.getElementById('rtToolbar').style.display = window.isAdvancedMode ? 'flex' : 'none'; requestAnimationFrame(resizePostTextarea); document.getElementById('postSubmitBtn').innerText = 'Guardar'; selectedMediaFiles = [...(editingPostElement.mediaData || [])]; renderMediaPreview(); openPostModal(editingPostElement.dataset.authorId || activeProfileId); }
-    function startReply(btn, e) { e.stopPropagation(); replyingToPost = btn.closest('.post'); replyingToThread = btn.closest('.thread-container, .profile-response-context'); document.getElementById('postText').dataset.placeholder = "Postea tu respuesta"; openPostModal(); }
-    function clearPostForm() { const ml = document.getElementById('mediaUploadLabel'); if(ml){ ml.style.opacity = '1'; ml.style.pointerEvents = 'auto'; } const mi = document.getElementById('postMedia'); if(mi) mi.disabled = false; document.getElementById('postText').innerHTML = ''; document.getElementById('postText').dataset.placeholder = "¡¿Qué está pasando?!"; window.isAdvancedMode = false; document.getElementById('rtToolbar').style.display = 'none'; requestAnimationFrame(resizePostTextarea); document.getElementById('postMedia').value = ''; document.getElementById('postSubmitBtn').innerText = 'Postear'; selectedMediaFiles = []; editingPostElement = null; replyingToThread = null; replyingToPost = null; composerProfileId = activeProfileId; renderComposerProfileOptions(composerProfileId); setComposerProfile(composerProfileId); renderMediaPreview(); }
+    function startReply(btn, e) { e.stopPropagation(); replyingToPost = btn.closest('.post'); replyingToThread = btn.closest('.thread-container, .profile-response-context'); document.getElementById('postText').dataset.placeholder = "Escribe tu respuesta"; openPostModal(); }
+    function clearPostForm() { const ml = document.getElementById('mediaUploadLabel'); if(ml){ ml.style.opacity = '1'; ml.style.pointerEvents = 'auto'; } const mi = document.getElementById('postMedia'); if(mi) mi.disabled = false; document.getElementById('postText').innerHTML = ''; document.getElementById('postText').dataset.placeholder = "¿Qué quieres anotar?"; window.isAdvancedMode = false; document.getElementById('rtToolbar').style.display = 'none'; requestAnimationFrame(resizePostTextarea); document.getElementById('postMedia').value = ''; document.getElementById('postSubmitBtn').innerText = 'Escribir'; selectedMediaFiles = []; editingPostElement = null; replyingToThread = null; replyingToPost = null; composerProfileId = activeProfileId; renderComposerProfileOptions(composerProfileId); setComposerProfile(composerProfileId); renderMediaPreview(); }
 
     function buildMediaGridForPost(mArr) {
         const mg = document.createElement('div'); mg.className = 'media-grid';
@@ -1439,7 +1439,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
     if (postBtn && postBtn.disabled) return;
     if (postBtn) {
         postBtn.dataset.origText = postBtn.innerText;
-        postBtn.innerText = 'Publicando...';
+        postBtn.innerText = 'Guardando...';
         postBtn.disabled = true;
     }
     try {
@@ -1532,7 +1532,7 @@ function formatUniqueHandle(inputHandle, excludeProfileId = null) {
     } finally {
         const postBtn = document.getElementById('postSubmitBtn');
         if (postBtn) {
-            postBtn.innerText = postBtn.dataset.origText || 'Postear';
+            postBtn.innerText = postBtn.dataset.origText || 'Escribir';
             postBtn.disabled = false;
         }
     }
@@ -3439,7 +3439,7 @@ window.addEventListener('popstate', (e) => {
         if (!ctx) return;
         const media = ctx.media;
         if (media.length === 0) {
-            uiAlert('Este post no tiene multimedia.');
+            uiAlert('Esta nota no tiene multimedia.');
             return;
         }
 
@@ -3476,13 +3476,13 @@ window.addEventListener('popstate', (e) => {
             }
 
             if (entries.length === 0) {
-                uiAlert('No se encontraron los archivos multimedia de este post en el almacenamiento.');
+                uiAlert('No se encontraron los archivos multimedia de esta nota en el almacenamiento.');
                 return;
             }
 
             const totalBytes = entries.reduce((sum, en) => sum + en.blob.size, 0);
             if (totalBytes > ZIP_MAX_SIZE) {
-                uiAlert('La multimedia de este post supera 4 GB y no puede empaquetarse en un ZIP.');
+                uiAlert('La multimedia de esta nota supera 4 GB y no puede empaquetarse en un ZIP.');
                 return;
             }
 
@@ -3763,7 +3763,7 @@ window.addEventListener('popstate', (e) => {
         if (btn.dataset.busy === 'true') return;
 
         const ctx = findPostContextIO(btn);
-        if (!ctx) { uiAlert('No se encontró el post.'); return; }
+        if (!ctx) { uiAlert('No se encontró la nota.'); return; }
 
         btn.dataset.busy = 'true';
         const toast = busyToast('Preparando exportación…');
@@ -3781,19 +3781,19 @@ window.addEventListener('popstate', (e) => {
 
             const handle = safeName(author && author.handle ? author.handle.replace(/^@/, '') : '', 'usuario');
             const dateTag = new Date().toISOString().slice(0, 10);
-            downloadBlobIO(result.archive, `${handle}_post_${safeName(ctx.post.id, 'post')}_${dateTag}.tnpost`);
+            downloadBlobIO(result.archive, `${handle}_nota_${safeName(ctx.post.id, 'post')}_${dateTag}.tnpost`);
 
             const replies = posts.length - 1;
             toast.done(replies > 0
-                ? `Post exportado con ${replies} ${replies === 1 ? 'respuesta' : 'respuestas'}.`
-                : 'Post exportado.');
+                ? `Nota exportada con ${replies} ${replies === 1 ? 'respuesta' : 'respuestas'}.`
+                : 'Nota exportada.');
             if (result.dropped > 0) {
                 uiAlert(`Atención: ${result.dropped} archivo(s) multimedia no se encontraron y no se incluyeron.`);
             }
         } catch (err) {
             toast.close();
-            console.error('Error al exportar el post:', err);
-            uiAlert('Error al exportar el post: ' + (err.message || err));
+            console.error('Error al exportar la nota:', err);
+            uiAlert('Error al exportar la nota: ' + (err.message || err));
         } finally {
             delete btn.dataset.busy;
         }
@@ -3825,7 +3825,7 @@ window.addEventListener('popstate', (e) => {
     window.requestImportPost = async function () {
         const txt = document.getElementById('postText');
         const hasDraft = (txt && txt.innerText.trim().length > 0) || selectedMediaFiles.length > 0;
-        if (hasDraft && !(await uiConfirm('Se descartará lo que estás escribiendo. ¿Importar de todas formas?', { title: 'Importar post', confirmText: 'Importar' }))) return;
+        if (hasDraft && !(await uiConfirm('Se descartará lo que estás escribiendo. ¿Importar de todas formas?', { title: 'Importar nota', confirmText: 'Importar' }))) return;
         document.getElementById('importPostInput').click();
     };
 
@@ -3838,7 +3838,7 @@ window.addEventListener('popstate', (e) => {
         const submitBtn = document.getElementById('postSubmitBtn');
         if (importBtn) importBtn.disabled = true;
         if (submitBtn) submitBtn.disabled = true;
-        const toast = busyToast('Importando post…');
+        const toast = busyToast('Importando nota…');
 
         try {
             if (editingPostElement) throw new Error('Termina o cancela la edición antes de importar.');
@@ -3986,14 +3986,14 @@ window.addEventListener('popstate', (e) => {
                 window.scrollTo({ top: 0 });
             }
 
-            toast.done(`Post importado${replyTotal > 0 ? ` con ${replyTotal}${replyTotal === 1 ? 'respuesta' : 'respuestas'}` : ''}.`);
+            toast.done(`Nota importada${replyTotal > 0 ? ` con ${replyTotal} ${replyTotal === 1 ? 'respuesta' : 'respuestas'}` : ''}.`);
             if (dropped > 0) {
                 uiAlert(`Algunos archivos multimedia estaban dañados o incompletos en el paquete y se omitieron (${dropped}).`);
             }
         } catch (err) {
             toast.close();
-            console.error('Error al importar el post:', err);
-            uiAlert('Error al importar el post: ' + (err.message || err));
+            console.error('Error al importar la nota:', err);
+            uiAlert('Error al importar la nota: ' + (err.message || err));
         } finally {
             input.value = '';
             if (importBtn) importBtn.disabled = false;
@@ -4107,19 +4107,19 @@ window.addEventListener('popstate', (e) => {
         if (dropdown) dropdown.style.display = 'none';
 
         const ctx = resolveMoveContext(btn);
-        if (!ctx) { uiAlert('No se encontró el post.'); return; }
+        if (!ctx) { uiAlert('No se encontró la nota.'); return; }
 
         const targets = profiles.filter(p => p.id !== ctx.currentAuthorId);
         if (targets.length === 0) {
-            uiAlert('Necesitas otro perfil al que mover este post. Crea uno primero.');
+            uiAlert('Necesitas otro perfil al que mover esta nota. Crea uno primero.');
             return;
         }
 
         movePending = ctx;
         const total = countMovablePosts(ctx);
         document.getElementById('moveProfileHint').textContent = total > 1
-            ? `Se moverán ${total} posts: el post y todas sus respuestas. Elige el perfil de destino.`
-            : 'Elige el perfil al que quieres mover este post.';
+            ? `Se moverán ${total} notas: la nota y todas sus respuestas. Elige el perfil de destino.`
+            : 'Elige el perfil al que quieres mover esta nota.';
 
         const list = document.getElementById('moveProfileList');
         list.innerHTML = '';
@@ -4138,7 +4138,7 @@ window.addEventListener('popstate', (e) => {
         const thread = threadsData.find(t => t.id === ctx.threadId);
         closeMoveProfileModal();
 
-        if (!target || !thread) { showMoveToast('No se pudo mover el post.'); return; }
+        if (!target || !thread) { showMoveToast('No se pudo mover la nota.'); return; }
 
         // Reasignar autoría: el perfil de destino figura como autor original.
         const total = ctx.scope === 'thread' ? thread.posts.length : 1;
@@ -4153,7 +4153,7 @@ window.addEventListener('popstate', (e) => {
             await saveThreadToFolder(thread);
         } catch (err) {
             console.error('Error al guardar el movimiento:', err);
-            uiAlert('El post se movió, pero no se pudo guardar: ' + (err.message || err));
+            uiAlert('La nota se movió, pero no se pudo guardar: ' + (err.message || err));
         }
 
         const inThread = document.body.classList.contains('in-thread-view');
@@ -4163,8 +4163,8 @@ window.addEventListener('popstate', (e) => {
 
         const replies = total - 1;
         showMoveToast(ctx.scope === 'thread' && replies > 0
-            ? `Post y ${replies} ${replies === 1 ? 'respuesta movidos' : 'respuestas movidas'} a ${target.name}.`
-            : `Post movido a ${target.name}.`);
+            ? `Nota y ${replies} ${replies === 1 ? 'respuesta movidas' : 'respuestas movidas'} a ${target.name}.`
+            : `Nota movida a ${target.name}.`);
     }
 
     // Botón Atrás del móvil: cierra el modal de "Mover a".
@@ -4226,11 +4226,11 @@ window.addEventListener('popstate', (e) => {
         if (isPinned(main)) {
             delete main.pinnedAt;
             delete main.pinnedFor;
-            showPinToast('Post desfijado del perfil.');
+            showPinToast('Nota desfijada del perfil.');
         } else {
             main.pinnedAt = Math.max(Date.now(), latestPinStamp() + 1);
             main.pinnedFor = main.authorId;
-            showPinToast('Post fijado en el perfil.');
+            showPinToast('Nota fijada en el perfil.');
         }
 
         try {
