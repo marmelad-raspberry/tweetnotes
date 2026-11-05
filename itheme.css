@@ -1540,3 +1540,49 @@ body .bottom-tabs .tab.active { color: #6cc0ff !important; }
     .ui-dialog-overlay, .ui-dialog-overlay.open .ui-dialog-box { transition: none; animation: none; }
 }
 /* <<< UI-DIALOGOS:END <<< */
+
+/* >>> SKEUOMORPH-ICONS:START >>> */
+/* Iconos esqueumórficos (iOS 5/6) que sustituyen a los emojis de los botones.
+   Silueta con degradado metálico + relieve (sombra de 1px) sobre botones plateados;
+   blanco con grabado oscuro sobre botones de cristal azul. */
+.sk-ico::before {
+    content: "";
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    margin-right: 7px;
+    vertical-align: -3px;
+    background: linear-gradient(to bottom, #6f7784 0%, #3a4049 52%, #1f2329 100%);
+    -webkit-mask: var(--sk-icon) center / contain no-repeat;
+            mask: var(--sk-icon) center / contain no-repeat;
+    filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.9));
+}
+/* Botones de cristal azul */
+.submit-btn.sk-ico::before {
+    background: linear-gradient(to bottom, #ffffff 0%, #dce8f8 55%, #b7cbe8 100%);
+    filter: drop-shadow(0 -1px 0 rgba(0, 20, 60, 0.75));
+}
+/* Botón deshabilitado (mientras procesa) */
+.sk-ico:disabled::before { opacity: 0.7; }
+
+.sk-ic-camera { --sk-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cpath%20fill-rule%3D%27evenodd%27%20d%3D%27M9%204%207.5%206H5a2%202%200%200%200-2%202v10a2%202%200%200%200%202%202h14a2%202%200%200%200%202-2V8a2%202%200%200%200-2-2h-2.5L15%204H9zm3%205a4%204%200%201%201%200%208%204%204%200%200%201%200-8zm0%202a2%202%200%201%200%200%204%202%202%200%200%200%200-4z%27%2F%3E%3C%2Fsvg%3E"); }
+.sk-ic-picture { --sk-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cpath%20fill-rule%3D%27evenodd%27%20d%3D%27M5%203h14a2%202%200%200%201%202%202v14a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2V5a2%202%200%200%201%202-2zM8.5%206.7a1.9%201.9%200%201%201%200%203.8%201.9%201.9%200%200%201%200-3.8zM4.8%2018%209%2012.6l3%203.6%202.6-3.2L19.2%2018z%27%2F%3E%3C%2Fsvg%3E"); }
+.sk-ic-box { --sk-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cpath%20fill-rule%3D%27evenodd%27%20d%3D%27M3%204h18a1%201%200%200%201%201%201v3a1%201%200%200%201-1%201H3a1%201%200%200%201-1-1V5a1%201%200%200%201%201-1zM4%2010.5h16V19a2%202%200%200%201-2%202H6a2%202%200%200%201-2-2v-8.5zM9.5%2013h5a1%201%200%200%201%200%202h-5a1%201%200%200%201%200-2z%27%2F%3E%3C%2Fsvg%3E"); }
+.sk-ic-tray { --sk-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cpath%20fill-rule%3D%27evenodd%27%20d%3D%27M10.5%203h3v6h3L12%2014%207.5%209h3V3zM3%2015h4.5L9%2017h6l1.5-2H21v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4z%27%2F%3E%3C%2Fsvg%3E"); }
+
+@supports not ((mask-image: none) or (-webkit-mask-image: none)) {
+    .sk-ico::before { display: none; }
+}
+
+@media (prefers-color-scheme: dark) {
+    .sk-ico::before {
+        background: linear-gradient(to bottom, #fbfcfe 0%, #c9d0da 52%, #8d96a3 100%);
+        filter: drop-shadow(0 -1px 0 rgba(0, 0, 0, 0.9));
+    }
+    .submit-btn.sk-ico::before {
+        background: linear-gradient(to bottom, #ffffff 0%, #dce8f8 55%, #b7cbe8 100%);
+        filter: drop-shadow(0 -1px 0 rgba(0, 10, 40, 0.85));
+    }
+}
+/* <<< SKEUOMORPH-ICONS:END <<< */

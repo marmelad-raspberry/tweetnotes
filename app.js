@@ -2626,7 +2626,7 @@ window.addEventListener('popstate', (e) => {
             return;
         }
 
-        const origText = btn ? btn.innerText : '📦 Exportar perfil';
+        const origText = btn ? btn.innerText : 'Exportar perfil';
         if (btn) {
             btn.disabled = true;
             btn.innerText = 'Preparando exportación...';
@@ -2798,7 +2798,7 @@ window.addEventListener('popstate', (e) => {
 
         const btn = document.getElementById('importProfileBtn');
         const createBtn = document.querySelector('#newProfileModal .submit-btn');
-        const origText = btn ? btn.innerText : '📥 Importar perfil';
+        const origText = btn ? btn.innerText : 'Importar perfil';
 
         if (btn) {
             btn.disabled = true;

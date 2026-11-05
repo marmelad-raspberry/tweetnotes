@@ -109,16 +109,16 @@
                     <textarea id="editBio" class="input-textarea"></textarea>
                 </div>
                 <div style="display: flex; gap: 20px; margin-top: 10px;">
-                    <label class="edit-profile-btn" style="display: inline-flex; align-items: center; cursor: pointer;">
-                        📷 Cambiar Avatar
+                    <label class="sk-ico sk-ic-camera edit-profile-btn" style="display: inline-flex; align-items: center; cursor: pointer;">
+                        Cambiar Avatar
                         <input type="file" id="editProfilePic" accept="image/*" hidden>
                     </label>
-                    <label class="edit-profile-btn" style="display: inline-flex; align-items: center; cursor: pointer;">
-                        🖼️ Cambiar Portada
+                    <label class="sk-ico sk-ic-picture edit-profile-btn" style="display: inline-flex; align-items: center; cursor: pointer;">
+                        Cambiar Portada
                         <input type="file" id="editCoverPic" accept="image/*" hidden>
                     </label>
                 </div>
-                <button id="exportProfileBtn" type="button" class="submit-btn" style="background: var(--primary-blue); color: #fff; margin-top: 20px; width: 100%;" onclick="exportCurrentProfile()">📦 Exportar perfil</button>
+                <button id="exportProfileBtn" type="button" class="sk-ico sk-ic-box submit-btn" style="background: var(--primary-blue); color: #fff; margin-top: 20px; width: 100%;" onclick="exportCurrentProfile()">Exportar perfil</button>
                 <button id="deleteProfileBtn" class="submit-btn" style="background: #f4212e; margin-top: 20px; width: 100%; display: none;" onclick="deleteProfile()">Eliminar perfil</button>
             </div>
         </div>
@@ -147,17 +147,17 @@
                     <textarea id="newBio" class="input-textarea"></textarea>
                 </div>
                 <div style="display: flex; gap: 20px; margin-top: 10px;">
-                    <label class="edit-profile-btn" style="display: inline-flex; align-items: center; cursor: pointer;">
-                        📷 Subir Avatar
+                    <label class="sk-ico sk-ic-camera edit-profile-btn" style="display: inline-flex; align-items: center; cursor: pointer;">
+                        Subir Avatar
                         <input type="file" id="newProfilePic" accept="image/*" hidden>
                     </label>
-                    <label class="edit-profile-btn" style="display: inline-flex; align-items: center; cursor: pointer;">
-                        🖼️ Subir Portada
+                    <label class="sk-ico sk-ic-picture edit-profile-btn" style="display: inline-flex; align-items: center; cursor: pointer;">
+                        Subir Portada
                         <input type="file" id="newCoverPic" accept="image/*" hidden>
                     </label>
                 </div>
                 <div id="importProfileContainer" style="border-top: 1px solid var(--border-color); margin-top: 20px; padding-top: 16px;">
-                    <button id="importProfileBtn" type="button" class="submit-btn" style="background: var(--primary-blue); color: #fff; width: 100%;" onclick="document.getElementById('importProfileInput').click()">📥 Importar perfil</button>
+                    <button id="importProfileBtn" type="button" class="sk-ico sk-ic-tray submit-btn" style="background: var(--primary-blue); color: #fff; width: 100%;" onclick="document.getElementById('importProfileInput').click()">Importar perfil</button>
                     <input type="file" id="importProfileInput" hidden onchange="importProfileFromFile(event)">
                 </div>
             </div>
@@ -200,7 +200,7 @@
                     </label>
                 </div>
                 <div class="media-actions-right">
-                    <button type="button" id="importPostBtn" class="import-post-btn" onclick="requestImportPost()" title="Importar nota">📥 Importar</button>
+                    <button type="button" id="importPostBtn" class="sk-ico sk-ic-tray import-post-btn" onclick="requestImportPost()" title="Importar nota">Importar</button>
                     <input type="file" id="importPostInput" accept=".tnpost,application/octet-stream" hidden onchange="importPostFromFile(event)">
                     <button class="submit-btn" id="postSubmitBtn" onclick="submitPost()">Escribir</button>
                 </div>
